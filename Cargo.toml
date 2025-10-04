@@ -25,7 +25,7 @@ cranelift-native = "0.124.1"
 thiserror = "2.0.17"
 inventory = "0.3"
 uuid = { version = "1.18.1", features = ["v4"] }
-tabulon_macros = {git = "https://github.com/tabulon-rs/tabulon"}
+tabulon_macros = {git = "https://github.com/tabulon-rs/tabulon", optional = true}
 
 [dev-dependencies]
 fasteval = "0.2.4"
@@ -34,5 +34,6 @@ rand = "0.8"
 foldhash = "0.2.0"
 
 [features]
-default = ["optimize"]
+default = ["optimize", "macros"]
 optimize = []
+macros = ["tabulon_macros"]
