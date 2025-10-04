@@ -2,7 +2,7 @@
 name = "tabulon_macros"
 version = "0.1.0"
 edition = "2024"
-authors = ["kihongpark <you@example.com>"]
+authors = ["kihongpark <dev.giong2012@gmail.com>"]
 description = "Internal procedural macros for the tabulon expression engine."
 license = "MIT"
 repository = "https://github.com/kihongpark/liftup"
