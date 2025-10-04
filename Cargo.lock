@@ -826,17 +826,8 @@ dependencies = [
  "quote",
  "rand",
  "syn",
- "tabulon_macros",
  "thiserror",
  "uuid",
-]
-
-[[package]]
-name = "tabulon_macros"
-version = "0.1.0"
-dependencies = [
- "quote",
- "syn",
 ]
 
 [[package]]
