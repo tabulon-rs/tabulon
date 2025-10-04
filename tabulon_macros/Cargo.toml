@@ -5,7 +5,7 @@ edition = "2024"
 authors = ["kihongpark <dev.giong2012@gmail.com>"]
 description = "Internal procedural macros for the tabulon expression engine."
 license = "MIT"
-repository = "https://github.com/kihongpark/liftup"
+repository = "https://github.com/tabulon-rs/tabulon"
 keywords = ["jit", "expression", "macro"]
 categories = ["compilers", "parser-implementations"]
 
