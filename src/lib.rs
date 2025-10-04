@@ -9,6 +9,7 @@ mod collect;
 mod codegen;
 mod optimizer;
 mod engine;
+mod macros;
 
 pub use error::{JitError, VarResolveError};
 pub use resolver::{VarResolver, IdentityResolver};
@@ -17,6 +18,6 @@ pub use registry::FnMeta;
 
 // Re-export inventory and the #[function] macro for user crates
 pub use inventory;
-pub use tabulon_macros::function;
+pub use macros::function;
 
 pub use engine::{Tabula, CompiledExpr};

@@ -10,15 +10,12 @@ keywords = ["jit", "expression", "eval", "cranelift", "math"]
 categories = ["compilers", "parser-implementations"]
 readme = "README.md"
 
-[workspace]
-members = [
-    "tabulon_macros",
-]
-
 [[bench]]
 name = "eval-bench"
 harness = false
 
+[lib]
+proc-macro = true
 
 [dependencies]
 cranelift = "0.124.1"
@@ -27,15 +24,15 @@ cranelift-module = "0.124.1"
 cranelift-native = "0.124.1"
 thiserror = "2.0.17"
 inventory = "0.3"
-tabulon_macros = { path = "tabulon_macros" }
 uuid = { version = "1.18.1", features = ["v4"] }
+quote = "1"
+syn = { version = "2", features = ["full"] }
 
 [dev-dependencies]
 fasteval = "0.2.4"
 criterion = "0.7.0"
 rand = "0.8"
 foldhash = "0.2.0"
-libc = "0.2"
 
 [features]
 default = ["optimize"]

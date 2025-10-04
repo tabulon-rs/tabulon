@@ -2,7 +2,6 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, ItemFn};
 
-// #[function] — no arguments supported for now
 #[proc_macro_attribute]
 pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = parse_macro_input!(item as ItemFn);
