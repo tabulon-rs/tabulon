@@ -823,11 +823,27 @@ dependencies = [
  "fasteval",
  "foldhash",
  "inventory",
- "quote",
  "rand",
- "syn",
+ "tabulon_macros 0.1.0 (git+https://github.com/tabulon-rs/tabulon)",
  "thiserror",
  "uuid",
+]
+
+[[package]]
+name = "tabulon_macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "tabulon_macros"
+version = "0.1.0"
+source = "git+https://github.com/tabulon-rs/tabulon#1706ff3a97db938fd608bf4ce9e6ca38f9bdd3dc"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]
