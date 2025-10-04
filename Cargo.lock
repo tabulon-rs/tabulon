@@ -824,7 +824,7 @@ dependencies = [
  "foldhash",
  "inventory",
  "rand",
- "tabulon_macros 0.1.0 (git+https://github.com/tabulon-rs/tabulon)",
+ "tabulon_macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
  "uuid",
 ]
@@ -840,7 +840,8 @@ dependencies = [
 [[package]]
 name = "tabulon_macros"
 version = "0.1.0"
-source = "git+https://github.com/tabulon-rs/tabulon#1706ff3a97db938fd608bf4ce9e6ca38f9bdd3dc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1db585bd4db2b73250cb4d59b6a918a1b3a9b9c2b4cdebf0e0bd29a9ed279f3"
 dependencies = [
  "quote",
  "syn",
