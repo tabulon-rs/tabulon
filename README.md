@@ -21,14 +21,7 @@ A high-performance, JIT-compiled expression evaluation engine for Rust, built on
 
 ## Quick Start
 
-1.  Add `tabulon` to your `Cargo.toml`:
-
-    ```toml
-    [dependencies]
-    tabulon = "0.1.0"
-    ```
-
-2.  Use the engine to compile and evaluate an expression:
+Use the engine to compile and evaluate an expression:
 
     ```rust
     use tabulon::Tabula;
