@@ -1,5 +1,5 @@
 use crate::ast::Ast;
-use crate::codegen::{VarLoadMode, codegen_expr};
+use crate::codegen::{codegen_expr, F64Consts};
 use crate::collect::collect_vars;
 use crate::error::JitError;
 #[cfg(feature = "optimize")]
@@ -18,24 +18,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use uuid::Uuid;
-
-#[derive(Clone)]
-pub(crate) struct VarCache {
-    values: Vec<Option<Value>>, // idx → 이미 로드된 SSA Value
-}
-impl VarCache {
-    pub fn new(n: usize) -> Self {
-        Self {
-            values: vec![None; n],
-        }
-    }
-    pub fn get(&self, i: usize) -> Option<Value> {
-        self.values[i]
-    }
-    pub fn set(&mut self, i: usize, v: Value) {
-        self.values[i] = Some(v);
-    }
-}
+use log::debug;
 
 pub struct Tabula<K = String, R = IdentityResolver> {
     pub(crate) resolver: R,
@@ -43,6 +26,12 @@ pub struct Tabula<K = String, R = IdentityResolver> {
     pub(crate) funcs: HashMap<(String, u8), RegisteredFn>,
     pub(crate) module: Option<JITModule>,
     pub(crate) generation: Arc<AtomicUsize>,
+}
+
+impl Default for Tabula<String, IdentityResolver> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Tabula<String, IdentityResolver> {
@@ -54,6 +43,22 @@ impl Tabula<String, IdentityResolver> {
             module: None,
             generation: Arc::new(AtomicUsize::new(0)),
         }
+    }
+}
+
+pub(crate) type ParsedMeta<K> = (Ast, Vec<K>, HashMap<String, usize>);
+
+fn ast_needs_bool_consts(ast: &Ast) -> bool {
+    use crate::ast::Ast::*;
+    match ast {
+        Num(_) | Var(_) => false,
+        Neg(x) => ast_needs_bool_consts(x),
+        Add(a,b) | Sub(a,b) | Mul(a,b) | Div(a,b) | Max(a,b) | Min(a,b) => {
+            ast_needs_bool_consts(a) || ast_needs_bool_consts(b)
+        }
+        Eq(_, _) | Ne(_, _) | Lt(_, _) | Le(_, _) | Gt(_, _) | Ge(_, _) | And(_, _) | Or(_, _) => true,
+        If(_, _, _) => true,
+        Call { args, .. } => args.iter().any(ast_needs_bool_consts),
     }
 }
 
@@ -138,11 +143,12 @@ where
         Ok(())
     }
 
+
     // --- Common helpers shared by compile and compile_ref ---
     fn parse_and_resolve(
         &self,
         expr: &str,
-    ) -> Result<(Ast, Vec<K>, HashMap<String, usize>), JitError> {
+    ) -> Result<ParsedMeta<K>, JitError> {
         // Parse to AST
         let parser = Parser::new(expr)?;
         let ast = parser.parse()?;
@@ -234,31 +240,55 @@ where
 
             let vars_ptr = builder.block_params(block)[0];
 
-            // Lazy variable loads: build values on-demand in codegen_expr
+            // Eagerly preload all variable values into SSA registers
             let mut mf = MemFlags::new();
             mf.set_readonly();
             mf.set_aligned();
-            let mut cache = VarCache::new(ordered_len);
-            let load_mode2 = match load_mode {
-                LoadMode::DirectF64 => VarLoadMode::DirectF64,
-                LoadMode::IndirectPtr => VarLoadMode::IndirectPtr,
-            };
+
+            let mut var_vals: Vec<Value> = Vec::with_capacity(ordered_len);
+            match load_mode {
+                LoadMode::DirectF64 => {
+                    // Direct f64 array: base + idx*8
+                    for idx in 0..ordered_len {
+                        let offset = (idx as i32) * 8;
+                        let v = builder.ins().load(types::F64, mf, vars_ptr, offset);
+                        var_vals.push(v);
+                    }
+                }
+                LoadMode::IndirectPtr => {
+                    // Pointer array -> f64
+                    let ptr_bytes: i32 = if ptr_ty == types::I64 { 8 } else { 4 };
+                    for idx in 0..ordered_len {
+                        let offset = (idx as i32) * ptr_bytes;
+                        let p = builder.ins().load(ptr_ty, mf, vars_ptr, offset);
+                        let v = builder.ins().load(types::F64, mf, p, 0);
+                        var_vals.push(v);
+                    }
+                }
+            }
+
+            // Lazy-constructed boolean constants provider bound to entry block.
+            let mut consts = F64Consts::new(block);
+            if ast_needs_bool_consts(ast) {
+                // Pre-initialize in entry block to avoid switching blocks later.
+                let _ = consts.one(&mut builder);
+                let _ = consts.zero(&mut builder);
+            }
+
             let val = codegen_expr(
                 module,
                 &self.funcs,
                 &mut builder,
                 var_index,
-                vars_ptr,
-                ptr_ty,
-                mf,
-                &mut cache,
+                &var_vals,
                 ast,
                 types::F64,
-                load_mode2,
+                &mut consts,
             )?;
             builder.ins().return_(&[val]);
             builder.finalize();
         }
+        println!("JIT code\n{}", ctx.func.display());
 
         module
             .define_function(func_id, &mut ctx)
@@ -336,7 +366,7 @@ impl<K> CompiledExpr<K> {
         let needed = self.ordered_vars.len();
         self.check_gen(values, needed)?;
         let f = self.func_ptr;
-        let out = unsafe { f(values.as_ptr() as *const f64) };
+        let out = unsafe { f(values.as_ptr()) };
         Ok(out)
     }
 }
@@ -453,7 +483,7 @@ impl<K> CompiledExprRef<K> {
         let needed = self.ordered_vars.len();
         self.check_gen(ptrs, needed)?;
         let f = self.func_ptr;
-        let out = unsafe { f(ptrs.as_ptr() as *const *const f64) };
+        let out = unsafe { f(ptrs.as_ptr()) };
         Ok(out)
     }
 }

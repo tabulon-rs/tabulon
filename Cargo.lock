@@ -873,6 +873,7 @@ dependencies = [
  "fasteval",
  "foldhash 0.2.0",
  "inventory",
+ "log",
  "rand",
  "shipyard",
  "tabulon_macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
