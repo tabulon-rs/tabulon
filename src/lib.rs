@@ -19,4 +19,4 @@ pub use registry::FnMeta;
 pub use inventory;
 pub use tabulon_macros::function;
 
-pub use engine::{Tabula, CompiledExpr};
+pub use engine::{Tabula, CompiledExprRef};

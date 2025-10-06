@@ -30,7 +30,7 @@ fn u64_var_keys_work() {
     let resolver = U64Resolver { map: reg };
     let mut eng: Tabula<u64, _> = Tabula::with_resolver(resolver);
 
-    let compiled = eng.compile("(A + B) * C").unwrap();
+    let compiled = eng.compile_ref("(A + B) * C").unwrap();
 
     // Provide values by u64 key
     let mut values_by_id: HashMap<u64, f64> = HashMap::new();
@@ -74,7 +74,7 @@ impl VarResolver<VarKey> for EnumResolver {
 #[test]
 fn enum_var_keys_work() {
     let mut eng: Tabula<VarKey, _> = Tabula::with_resolver(EnumResolver);
-    let compiled = eng.compile("(A + B) * C").unwrap();
+    let compiled = eng.compile_ref("(A + B) * C").unwrap();
 
     let mut values: HashMap<VarKey, f64> = HashMap::new();
     values.insert(VarKey::Str, 100.0);

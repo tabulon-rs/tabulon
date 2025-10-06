@@ -188,7 +188,7 @@ fn benchmark_eval(c: &mut Criterion) {
             // Use u64-keyed resolver and map for tabulon
             let mut eng: Tabula<u64, _> = Tabula::with_resolver(U64Resolver);
             register_functions!(eng, dice).unwrap();
-            let compiled = eng.compile(expr_str).unwrap();
+            let compiled = eng.compile_ref(expr_str).unwrap();
             let vars = create_u64_map();
 
             b.iter(|| {

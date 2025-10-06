@@ -6,6 +6,7 @@ use cranelift::prelude::*;
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module};
 use std::collections::HashMap;
+use crate::engine::VarCache;
 
 pub(crate) fn codegen_expr<'a>(
     module: &mut JITModule,
@@ -227,4 +228,21 @@ pub(crate) fn codegen_expr<'a>(
             Ok(results[0])
         }
     }
+}
+
+fn ensure_var(
+    builder: &mut FunctionBuilder,
+    vars_ptr: Value,
+    ptr_ty: Type,
+    mf: MemFlags,
+    idx: usize,
+    cache: &mut VarCache,
+) -> Value {
+    if let Some(v) = cache.get(idx) { return v; }
+    let ptr_bytes: i32 = if ptr_ty == types::I64 { 8 } else { 4 };
+    let offset = (idx as i32) * ptr_bytes;
+    let p = builder.ins().load(ptr_ty, mf, vars_ptr, offset);
+    let v = builder.ins().load(types::F64, mf, p, 0);
+    cache.set(idx, v);
+    v
 }

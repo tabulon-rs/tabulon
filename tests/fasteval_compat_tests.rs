@@ -62,7 +62,7 @@ fn tabulon_matches_fasteval_on_random_inputs() {
     let mut compiled_tabulon = Vec::new();
     for expr in &expressions {
         let mut eng = Tabula::new();
-        let compiled = eng.compile(expr).unwrap();
+        let compiled = eng.compile_ref(expr).unwrap();
         compiled_tabulon.push((expr.to_string(), compiled));
     }
 

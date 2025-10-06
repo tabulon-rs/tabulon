@@ -32,6 +32,7 @@ fasteval = "0.2.4"
 criterion = "0.7.0"
 rand = "0.8"
 foldhash = "0.2.0"
+shipyard = "0.9.3"
 
 [features]
 default = ["optimize"]

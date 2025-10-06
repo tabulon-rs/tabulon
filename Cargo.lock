@@ -388,6 +388,12 @@ checksum = "4f4cdac9e4065d7c48e30770f8665b8cef9a3a73a63a4056a33a5f395bc7cf75"
 
 [[package]]
 name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
+name = "foldhash"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
@@ -441,6 +447,11 @@ name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+dependencies = [
+ "allocator-api2",
+ "foldhash 0.1.5",
+ "rayon",
+]
 
 [[package]]
 name = "hashbrown"
@@ -509,6 +520,15 @@ name = "libm"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
+
+[[package]]
+name = "lock_api"
+version = "0.4.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
+dependencies = [
+ "scopeguard",
+]
 
 [[package]]
 name = "log"
@@ -746,6 +766,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "scopeguard"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -789,6 +815,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "shipyard"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a45c5f393de8802e88fe0a868a8b2972ff2c8a87e0d2ab984bda9dadfb6d46"
+dependencies = [
+ "foldhash 0.1.5",
+ "hashbrown 0.15.5",
+ "lock_api",
+ "rayon",
+ "shipyard_proc",
+]
+
+[[package]]
+name = "shipyard_proc"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f248ea3f0a7c02afd00e140d6a855002ffd40814174b6aa17ae7c4cb9039927"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -821,9 +871,10 @@ dependencies = [
  "cranelift-native",
  "criterion",
  "fasteval",
- "foldhash",
+ "foldhash 0.2.0",
  "inventory",
  "rand",
+ "shipyard",
  "tabulon_macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
  "uuid",
