@@ -457,23 +457,29 @@ impl<K> CompiledExprRef<K> {
     /// ```
     /// use tabulon::{Tabula, JitError};
     /// # fn main() -> Result<(), JitError> {
-    /// let mut engine = Tabula::new();
-    /// let compiled = engine.compile_ref("a + b * 2")?;
-    /// let mut values: Box<[f64]> = vec![3.0, 4.5].into_boxed_slice();
-    /// // Build pointers just-in-time for the call
-    /// let ptrs: Vec<*const f64> = (0..compiled.vars().len())
-    ///     .map(|i| &values[i] as *const f64)
-    ///     .collect();
-    /// let out1 = compiled.eval_ptrs(&ptrs)?;
-    /// assert!((out1 - (3.0 + 4.5 * 2.0)).abs() < 1e-12);
-    /// // Update values in place and evaluate again
-    /// values[0] = 5.0; // a
-    /// values[1] = 10.0; // b
-    /// let ptrs2: Vec<*const f64> = (0..compiled.vars().len())
-    ///     .map(|i| &values[i] as *const f64)
-    ///     .collect();
-    /// let out2 = compiled.eval_ptrs(&ptrs2)?;
-    /// assert!((out2 - (5.0 + 10.0 * 2.0)).abs() < 1e-12);
+    /// let mut map = HashMap::new();
+    /// map.insert(1, Box::new(2f64));
+    /// let mut cache = Vec::new();
+    /// let resolver = U64Resolver;
+    ///
+    /// let mut engine = Tabula::with_resolver(resolver);
+    /// let compiled = engine.compile("a + 10").unwrap();
+    /// let vec = compiled.vars().iter().map(|v| {
+    ///         let bx: &Box<f64> = map.get(v).unwrap();
+    ///         bx.as_ref() as *const f64 as usize
+    ///     }).collect::<Vec<_>>();
+    /// cache.extend(vec.iter().copied());
+    /// let vars = vec.iter().map(|v| *v as *const f64).collect::<Vec<_>>();
+    ///
+    /// let result = compiled.eval_ptrs(&vars).unwrap();
+    ///
+    /// assert_eq!(result, 12.0);
+    ///
+    /// map.entry(1).and_modify(|v| **v = 4f64);
+    ///
+    /// let result = compiled.eval_ptrs(&vars).unwrap();
+    ///
+    /// assert_eq!(result, 14.0);
     /// # Ok(()) }
     /// ```
     ///

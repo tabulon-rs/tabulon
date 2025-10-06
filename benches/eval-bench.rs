@@ -27,6 +27,11 @@ fn create_string_map() -> HashMap<String, f64> {
     vars.insert("distance".to_string(), 20.0);
     vars.insert("is_taunted".to_string(), 1.0);
     vars.insert("crit_chance".to_string(), 20.0);
+    vars.insert("agility".to_string(), 15.0);
+    vars.insert("intelligence".to_string(), 25.0);
+    vars.insert("mana_pool".to_string(), 500.0);
+    vars.insert("rage_level".to_string(), 75.0);
+    vars.insert("haste_rating".to_string(), 1.1);
 
     vars
 }
@@ -46,6 +51,11 @@ impl VarResolver<u64> for U64Resolver {
             "distance" => 8,
             "is_taunted" => 9,
             "crit_chance" => 10,
+            "agility" => 11,
+            "intelligence" => 12,
+            "mana_pool" => 13,
+            "rage_level" => 14,
+            "haste_rating" => 15,
             _ => return Err(VarResolveError::Unknown(ident.to_string())),
         };
         Ok(id)
@@ -64,6 +74,20 @@ fn create_u64_map() -> HashMap<u64, f64> {
     vars.insert(8, 20.0); // distance
     vars.insert(9, 1.0); // is_taunted
     vars.insert(10, 20.0); // crit_chance
+    vars.insert(11, 15.0); // agility
+    vars.insert(12, 25.0); // intelligence
+    vars.insert(13, 500.0); // mana_pool
+    vars.insert(14, 75.0); // rage_level
+    vars.insert(15, 1.1); // haste_rating
+    vars
+}
+
+fn create_u64_box_map() -> HashMap<u64, Box<f64>> {
+    let mut vars: HashMap<u64, Box<f64>> = HashMap::new();
+    let map = create_u64_map();
+    map.iter().for_each(|(k, v)| {
+        vars.insert(*k, Box::new(*v));
+    });
     vars
 }
 
@@ -112,6 +136,10 @@ fn benchmark_eval(c: &mut Criterion) {
         (
             "full_combat_formula",
             "((power * skill_modifier) - (defense / 2.0)) * (1.0 + if(dice(0, 100) < crit_chance, critical_bonus, 0.0)) + (threat / distance)",
+        ),
+        (
+            "hyper_complex_mmo_calc",
+            "max(0, ( (power/defense) * (skill_modifier + intelligence/100.0) + if(dice(0,100)<(crit_chance+agility/10), critical_bonus*100, 0) + (threat/max(1,distance)) + a - b ) * if(is_taunted>0, 1.5, 1.0) * haste_rating + if(rage_level > 50, rage_level/50, -mana_pool/500) )"
         ),
     ];
 
@@ -180,25 +208,43 @@ fn benchmark_eval(c: &mut Criterion) {
                 BatchSize::SmallInput,
             )
         });
-    }
 
-    for (name, expr_str) in expressions {
+
         c.bench_function(&format!("tabulon_eval_{}", name), |b| {
             // Use u64-keyed resolver and map for tabulon
             let mut eng: Tabula<u64, _> = Tabula::with_resolver(U64Resolver);
             register_functions!(eng, dice).unwrap();
-            let compiled = eng.compile_ref(expr_str).unwrap();
+            let compiled = eng.compile(expr_str).unwrap();
             let vars = create_u64_map();
 
             b.iter(|| {
                 // The values must be supplied in the order that the compiler determined.
                 // We create a Vec of references here to match the `eval` signature.
-                let ordered_values: Vec<&f64> = compiled
+                let ordered_values: Vec<f64> = compiled
                     .vars()
                     .iter()
-                    .map(|key| vars.get(key).unwrap_or(&DEFAULT_F64))
+                    .map(|key| *vars.get(key).unwrap_or(&DEFAULT_F64))
                     .collect();
                 let _ = black_box(compiled.eval(&ordered_values));
+            });
+        });
+
+        c.bench_function(&format!("tabulon_eval_ref_{}", name), |b| {
+            // Use u64-keyed resolver and map for tabulon
+            let mut eng: Tabula<u64, _> = Tabula::with_resolver(U64Resolver);
+            register_functions!(eng, dice).unwrap();
+            let compiled = eng.compile_ref(expr_str).unwrap();
+            let vars = create_u64_box_map();
+            let box_default = Box::new(DEFAULT_F64);
+            let ordered_ptrs: Vec<usize> = compiled
+                .vars()
+                .iter()
+                .map(|key| vars.get(key).unwrap_or(&box_default).as_ref() as *const f64 as usize)
+                .collect();
+
+            b.iter(|| {
+                let cached_values = ordered_ptrs.iter().map(|v| *v as *const f64).collect::<Vec<_>>();
+                let _ = black_box(compiled.eval_ptrs(&cached_values));
             });
         });
     }
