@@ -1,5 +1,5 @@
 use crate::collect::collect_vars;
-use crate::codegen::codegen_expr;
+use crate::codegen::{codegen_expr, VarLoadMode};
 use crate::error::JitError;
 use crate::parser::Parser;
 use crate::resolver::{IdentityResolver, VarResolver};
@@ -184,33 +184,25 @@ where
 
             let vars_ptr = builder.block_params(block)[0];
 
-            // Preload variable values according to load mode
-            let mut var_vals: Vec<Value> = Vec::with_capacity(ordered_len);
-            match load_mode {
-                LoadMode::DirectF64 => {
-                    let mut mf = MemFlags::new();
-                    mf.set_readonly();
-                    mf.set_aligned();
-                    let f64_bytes: i32 = 8;
-                    for idx in 0..ordered_len {
-                        let offset = (idx as i32) * f64_bytes;
-                        let val = builder.ins().load(types::F64, mf, vars_ptr, offset);
-                        var_vals.push(val);
-                    }
-                }
-                LoadMode::IndirectPtr => {
-                    let mf = MemFlags::new();
-                    let ptr_bytes: i32 = if ptr_ty == types::I64 { 8 } else { 4 };
-                    for idx in 0..ordered_len {
-                        let offset = (idx as i32) * ptr_bytes;
-                        let p = builder.ins().load(ptr_ty, mf, vars_ptr, offset);
-                        let v = builder.ins().load(types::F64, mf, p, 0);
-                        var_vals.push(v);
-                    }
-                }
-            }
-
-            let val = codegen_expr(module, &self.funcs, &mut builder, var_index, &var_vals, ast, types::F64)?;
+            // Lazy variable loads: build values on-demand in codegen_expr
+            let mut mf = MemFlags::new();
+            mf.set_readonly();
+            mf.set_aligned();
+            let mut cache = VarCache::new(ordered_len);
+            let load_mode2 = match load_mode { LoadMode::DirectF64 => VarLoadMode::DirectF64, LoadMode::IndirectPtr => VarLoadMode::IndirectPtr };
+            let val = codegen_expr(
+                module,
+                &self.funcs,
+                &mut builder,
+                var_index,
+                vars_ptr,
+                ptr_ty,
+                mf,
+                &mut cache,
+                ast,
+                types::F64,
+                load_mode2,
+            )?;
             builder.ins().return_(&[val]);
             builder.finalize();
         }
@@ -434,22 +426,6 @@ trait CheckGen {
     fn check_gen<T>(&self, arr: &[T], needed: usize) -> Result<(), JitError>;
 }
 
-fn ensure_var(
-    builder: &mut FunctionBuilder,
-    vars_ptr: Value,
-    ptr_ty: Type,
-    mf: MemFlags,
-    idx: usize,
-    cache: &mut VarCache,
-) -> Value {
-    if let Some(v) = cache.get(idx) { return v; }
-    let ptr_bytes: i32 = if ptr_ty == types::I64 { 8 } else { 4 };
-    let offset = (idx as i32) * ptr_bytes;
-    let p = builder.ins().load(ptr_ty, mf, vars_ptr, offset);
-    let v = builder.ins().load(types::F64, mf, p, 0);
-    cache.set(idx, v);
-    v
-}
 
 
 #[derive(Copy, Clone)]
