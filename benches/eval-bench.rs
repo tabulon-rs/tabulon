@@ -1,12 +1,12 @@
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use fasteval::{eval_compiled_ref, Compiler, Evaler, Parser, Slab};
-use tabulon::{register_functions, Tabula, VarResolver, VarResolveError};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use fasteval::{Compiler, Evaler, Parser, Slab, eval_compiled_ref};
+use foldhash::{HashMap, HashMapExt};
 use rand::Rng;
 use std::hint::black_box;
-use foldhash::{HashMap, HashMapExt};
 use tabulon::function;
+use tabulon::{Tabula, VarResolveError, VarResolver, register_functions};
 
-const DEFAULT_F64:f64 = 0.0f64;
+const DEFAULT_F64: f64 = 0.0f64;
 
 #[function]
 fn dice(min: f64, max: f64) -> f64 {
@@ -77,20 +77,21 @@ fn benchmark_eval(c: &mut Criterion) {
         ("variable", "a"),
         ("simple_add", "a + b"),
         ("simple_mul", "a * b"),
-        ("multiple_same_var", "a + a + a + a + a + a + a + a + a + a * a * a * a"),
+        (
+            "multiple_same_var",
+            "a + a + a + a + a + a + a + a + a + a * a * a * a",
+        ),
         ("simple_comparison", "a > b"),
         ("simple_and_short", "0.0 && 1.0"),
         ("simple_and_long", "1.0 && 1.0"),
         ("simple_or_short", "1.0 || 0.0"),
         ("simple_or_long", "0.0 || 1.0"),
-
         // Intermediate
         ("complex_arithmetic", "(a * a + b * b) / 2.0"),
         ("builtin_func_max", "max(a, b)"),
         ("custom_func_if", "if(a > b, a, b)"),
         ("simple_dice", "dice(1, 6)"),
         ("dice_with_op", "dice(1, 20) + defense"),
-
         // Complex & Game-Oriented
         (
             "damage_calculation",
@@ -169,13 +170,11 @@ fn benchmark_eval(c: &mut Criterion) {
                     ns
                 },
                 |mut eval_ns| {
-
                     let mut eval = || -> Result<f64, fasteval::Error> {
                         Ok(eval_compiled_ref!(&compiled, &slab, &mut eval_ns))
                     };
                     let _ = black_box(
-                        eval()
-                            .unwrap_or_else(|e| panic!("Error evaluating expression: {}", e))
+                        eval().unwrap_or_else(|e| panic!("Error evaluating expression: {}", e)),
                     );
                 },
                 BatchSize::SmallInput,
@@ -202,7 +201,7 @@ fn benchmark_eval(c: &mut Criterion) {
                 let _ = black_box(compiled.eval(&ordered_values));
             });
         });
-    };
+    }
 }
 
 criterion_group!(benches, benchmark_eval);

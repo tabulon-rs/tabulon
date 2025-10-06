@@ -31,7 +31,9 @@ fn left_associativity_sub() {
     // A - B - C = (A - B) - C
     let mut eng = Tabula::new();
     let c = eng.compile_ref("A - B - C").unwrap();
-    let a = 10.0; let b = 2.0; let d = 3.0;
+    let a = 10.0;
+    let b = 2.0;
+    let d = 3.0;
     assert_eq!(c.eval(&[&a, &b, &d]).unwrap(), 5.0);
 }
 
@@ -43,7 +45,9 @@ fn relational_vs_equality_precedence() {
     // If parsed as (A == B) < C it would be (0==2)->0 < 3 -> 1, which differs.
     let mut eng = Tabula::new();
     let c = eng.compile_ref("A == B < C").unwrap();
-    let a = 0.0; let b = 2.0; let d = 3.0;
+    let a = 0.0;
+    let b = 2.0;
+    let d = 3.0;
     assert_eq!(c.eval(&[&a, &b, &d]).unwrap(), 0.0);
 }
 

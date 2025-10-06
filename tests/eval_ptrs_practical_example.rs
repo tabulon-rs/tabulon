@@ -1,4 +1,4 @@
-use tabulon::{Tabula, JitError};
+use tabulon::{JitError, Tabula};
 
 // A practical, non-ECS example that demonstrates how to reuse a stable array of values
 // and build raw pointers right before calling `eval_ptrs`.
@@ -21,7 +21,7 @@ fn eval_ptrs_with_stable_boxed_slice_and_rebuilt_ptrs() -> Result<(), JitError> 
     assert!((out1 - (3.0 + 4.5 * 2.0)).abs() < 1e-12);
 
     // Update values in place to keep addresses stable.
-    values[0] = 5.0;  // a
+    values[0] = 5.0; // a
     values[1] = 10.0; // b
 
     // Rebuild pointers just before the second evaluation.

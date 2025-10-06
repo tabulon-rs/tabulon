@@ -1,13 +1,19 @@
-use tabulon::{Tabula, register_functions, function};
+use tabulon::{Tabula, function, register_functions};
 
 #[function]
-pub fn min(a: f64, b: f64) -> f64 { if a < b { a } else { b } }
+pub fn min(a: f64, b: f64) -> f64 {
+    if a < b { a } else { b }
+}
 
 #[function]
-pub fn one() -> f64 { 1.0 }
+pub fn one() -> f64 {
+    1.0
+}
 
 #[function]
-pub fn pow2(x: f64) -> f64 { x * x }
+pub fn pow2(x: f64) -> f64 {
+    x * x
+}
 
 #[test]
 fn custom_min_binary() {
@@ -15,7 +21,8 @@ fn custom_min_binary() {
     register_functions!(eng, min).unwrap();
 
     let compiled = eng.compile_ref("min(A, B)").unwrap();
-    let a = 3.0; let b = 5.0;
+    let a = 3.0;
+    let b = 5.0;
     assert_eq!(compiled.vars(), &["A", "B"]);
     assert_eq!(compiled.eval(&[&a, &b]).unwrap(), 3.0);
 }

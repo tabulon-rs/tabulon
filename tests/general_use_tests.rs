@@ -1,6 +1,6 @@
 use foldhash::{HashMap, HashMapExt};
-use tabulon::{CompiledExprRef, Tabula, VarResolveError};
 use shipyard::{Component, IntoIter, Unique, UniqueView, ViewMut, World};
+use tabulon::{CompiledExprRef, Tabula, VarResolveError};
 
 struct U64Resolver;
 
@@ -15,7 +15,7 @@ impl tabulon::VarResolver<usize> for U64Resolver {
 }
 
 struct Namespace {
-    map: HashMap<usize, Box<f64>>, // Box to keep addresses stable
+    map: HashMap<usize, Box<f64>>,         // Box to keep addresses stable
     var_cache: HashMap<usize, Vec<usize>>, // cache raw addresses as usize (Send + Sync)
 }
 
@@ -25,7 +25,7 @@ struct PropertyBag {
 }
 
 #[derive(Unique)]
-struct Compiled{
+struct Compiled {
     compiled_expr: CompiledExprRef<usize>,
 }
 
@@ -48,21 +48,20 @@ fn test() {
     let compiled = engine.compile_ref("a + 10").expect("TODO: panic message");
 
     let mut world = World::new();
-    let compiled = Compiled { compiled_expr: compiled };
+    let compiled = Compiled {
+        compiled_expr: compiled,
+    };
 
     world.add_unique(compiled);
 
-    world.add_entity((PropertyBag { ns },) );
+    world.add_entity((PropertyBag { ns },));
 
     world.run(eval_system);
     world.run(change_property_bag_system);
     world.run(eval_system);
 }
 
-fn eval_system(
-    mut property_bag: ViewMut<PropertyBag>,
-    compiled: UniqueView<Compiled>
-) {
+fn eval_system(mut property_bag: ViewMut<PropertyBag>, compiled: UniqueView<Compiled>) {
     (&mut property_bag).iter().for_each(move |p| {
         if let Some(cached) = p.ns.var_cache.get(&1) {
             // turn cached addresses back into pointers
@@ -90,9 +89,7 @@ fn eval_system(
     })
 }
 
-fn change_property_bag_system(
-    mut property_bag: ViewMut<PropertyBag>,
-) {
+fn change_property_bag_system(mut property_bag: ViewMut<PropertyBag>) {
     (&mut property_bag).iter().for_each(|p| {
         if let Some(v) = p.ns.map.get_mut(&1) {
             **v = 4f64; // update in-place to keep Box allocation (and address) stable
@@ -101,7 +98,6 @@ fn change_property_bag_system(
         }
     })
 }
-
 
 #[test]
 fn cache_ptr_test() {
@@ -112,10 +108,14 @@ fn cache_ptr_test() {
 
     let mut engine = Tabula::with_resolver(resolver);
     let compiled = engine.compile_ref("a + 10").expect("TODO: panic message");
-    let vec = compiled.vars().iter().map(|v| {
-        let bx: &Box<f64> = map.get(v).unwrap();
-        bx.as_ref() as *const f64 as usize
-    }).collect::<Vec<_>>();
+    let vec = compiled
+        .vars()
+        .iter()
+        .map(|v| {
+            let bx: &Box<f64> = map.get(v).unwrap();
+            bx.as_ref() as *const f64 as usize
+        })
+        .collect::<Vec<_>>();
     cache.extend(vec.iter().copied());
 
     let vars = vec.iter().map(|v| *v as *const f64).collect::<Vec<_>>();
@@ -130,4 +130,3 @@ fn cache_ptr_test() {
 
     assert_eq!(result, 14.0);
 }
-

@@ -1,7 +1,9 @@
-use tabulon::{Tabula, register_functions, function, JitError};
+use tabulon::{JitError, Tabula, function, register_functions};
 
 #[function]
-pub fn mock_min(a: f64, b: f64) -> f64 { if a < b { a } else { b } }
+pub fn mock_min(a: f64, b: f64) -> f64 {
+    if a < b { a } else { b }
+}
 
 #[test]
 fn register_after_compile_requires_free_then_succeeds() {
@@ -15,7 +17,11 @@ fn register_after_compile_requires_free_then_succeeds() {
     let err = register_functions!(eng, mock_min).unwrap_err();
     match err {
         JitError::Internal(msg) => {
-            assert!(msg.contains("cannot register functions"), "unexpected message: {}", msg);
+            assert!(
+                msg.contains("cannot register functions"),
+                "unexpected message: {}",
+                msg
+            );
         }
         other => panic!("expected Internal error, got: {other:?}"),
     }
@@ -26,7 +32,8 @@ fn register_after_compile_requires_free_then_succeeds() {
 
     // Now we can compile expressions that call the newly registered function
     let compiled = eng.compile_ref("mock_min(A, B)").unwrap();
-    let a = 3.0; let b = 5.0;
+    let a = 3.0;
+    let b = 5.0;
     assert_eq!(compiled.eval(&[&a, &b]).unwrap(), 3.0);
 }
 
@@ -37,7 +44,8 @@ fn clearing_functions_prevents_calls_until_reregistered() {
 
     // Works before clearing
     let compiled = eng.compile_ref("mock_min(A,B)").unwrap();
-    let a = 1.0; let b = 2.0;
+    let a = 1.0;
+    let b = 2.0;
     assert_eq!(compiled.eval(&[&a, &b]).unwrap(), 1.0);
 
     // Free compiled code and clear registry
@@ -65,7 +73,8 @@ fn clearing_functions_prevents_calls_until_reregistered() {
 fn eval_after_free_returns_invalidated_error() {
     let mut eng = Tabula::new();
     let compiled = eng.compile_ref("A + B").unwrap();
-    let a = 1.0; let b = 2.0;
+    let a = 1.0;
+    let b = 2.0;
     assert_eq!(compiled.eval(&[&a, &b]).unwrap(), 3.0);
     // Free JIT memory; the old compiled must be invalid now
     eng.free_memory();

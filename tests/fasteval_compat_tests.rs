@@ -1,4 +1,4 @@
-use fasteval::{eval_compiled_ref, Compiler, Evaler, Parser, Slab};
+use fasteval::{Compiler, Evaler, Parser, Slab, eval_compiled_ref};
 use rand::Rng;
 use std::collections::HashMap;
 use tabulon::Tabula;
@@ -19,16 +19,26 @@ fn eval_with_fasteval(expr: &str, vars: &HashMap<String, f64>) -> Result<f64, fa
     let mut ns = |name: &str, args: Vec<f64>| -> Option<f64> {
         match name {
             "if" => {
-                if args.len() != 3 { return Some(f64::NAN); }
-                if args[0] >= 1.0 { Some(args[1]) } else { Some(args[2]) }
+                if args.len() != 3 {
+                    return Some(f64::NAN);
+                }
+                if args[0] >= 1.0 {
+                    Some(args[1])
+                } else {
+                    Some(args[2])
+                }
             }
             "max" => {
-                if args.len() != 2 { return Some(f64::NAN); }
+                if args.len() != 2 {
+                    return Some(f64::NAN);
+                }
                 Some(args[0].max(args[1]))
             }
             // Variables
             _ => {
-                if !args.is_empty() { return Some(f64::NAN); }
+                if !args.is_empty() {
+                    return Some(f64::NAN);
+                }
                 vars.get(name).copied()
             }
         }
@@ -78,7 +88,9 @@ fn tabulon_matches_fasteval_on_random_inputs() {
             let a: f64 = rng.gen_range(-100.0..100.0);
             let b: f64 = rng.gen_range(-100.0..100.0);
             let mut c: f64 = rng.gen_range(-100.0..100.0);
-            if (c + 1.0).abs() < 1e-6 { c += 2.0; }
+            if (c + 1.0).abs() < 1e-6 {
+                c += 2.0;
+            }
             vars.insert("a".to_string(), a);
             vars.insert("b".to_string(), b);
             vars.insert("c".to_string(), c);
@@ -99,7 +111,15 @@ fn tabulon_matches_fasteval_on_random_inputs() {
             }
             // Allow tiny numerical differences
             let diff = (fe_out - tab_out).abs();
-            assert!(diff <= EPS, "expr='{}' fasteval={} tabulon={} diff={} vars={:?}", expr, fe_out, tab_out, diff, vars);
+            assert!(
+                diff <= EPS,
+                "expr='{}' fasteval={} tabulon={} diff={} vars={:?}",
+                expr,
+                fe_out,
+                tab_out,
+                diff,
+                vars
+            );
         }
     }
 }

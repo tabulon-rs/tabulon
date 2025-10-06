@@ -1,4 +1,4 @@
-use tabulon::{Tabula, JitError};
+use tabulon::{JitError, Tabula};
 
 #[test]
 fn variable_order_and_eval_compile() -> Result<(), JitError> {
@@ -17,7 +17,10 @@ fn values_len_error_compile() {
     let compiled = engine.compile("A + B + C").unwrap();
     let err = compiled.eval(&[1.0, 2.0]).unwrap_err();
     match err {
-        JitError::ValuesLen { expected, got } => { assert_eq!(expected, 3); assert_eq!(got, 2); }
+        JitError::ValuesLen { expected, got } => {
+            assert_eq!(expected, 3);
+            assert_eq!(got, 2);
+        }
         _ => panic!("expected ValuesLen error"),
     }
 }

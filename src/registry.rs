@@ -1,4 +1,3 @@
-
 // Re-exported metadata for functions collected via #[function]
 #[derive(Clone, Copy)]
 pub struct FnMeta {

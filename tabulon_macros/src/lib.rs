@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, ItemFn};
+use syn::{ItemFn, parse_macro_input};
 
 // #[function] — no arguments supported for now
 #[proc_macro_attribute]
@@ -11,11 +11,15 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Verify return type is f64
     let ret_ok = match &sig.output {
-        syn::ReturnType::Type(_, ty) => matches!(**ty, syn::Type::Path(ref tp) if tp.path.is_ident("f64")),
+        syn::ReturnType::Type(_, ty) => {
+            matches!(**ty, syn::Type::Path(ref tp) if tp.path.is_ident("f64"))
+        }
         syn::ReturnType::Default => false,
     };
     if !ret_ok {
-        return syn::Error::new_spanned(&sig.output, "#[function] requires return type f64").to_compile_error().into();
+        return syn::Error::new_spanned(&sig.output, "#[function] requires return type f64")
+            .to_compile_error()
+            .into();
     }
 
     // Collect parameter idents and ensure all are f64
@@ -26,21 +30,41 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
             syn::FnArg::Typed(pt) => {
                 if let syn::Pat::Ident(pat_ident) = &*pt.pat {
                     if !matches!(*pt.ty, syn::Type::Path(ref tp) if tp.path.is_ident("f64")) {
-                        return syn::Error::new_spanned(&pt.ty, "#[function] only supports f64 parameters").to_compile_error().into();
+                        return syn::Error::new_spanned(
+                            &pt.ty,
+                            "#[function] only supports f64 parameters",
+                        )
+                        .to_compile_error()
+                        .into();
                     }
                     param_idents.push(pat_ident.ident.clone());
                     arity += 1;
                 } else {
-                    return syn::Error::new_spanned(&pt.pat, "#[function] requires simple identifier parameters").to_compile_error().into();
+                    return syn::Error::new_spanned(
+                        &pt.pat,
+                        "#[function] requires simple identifier parameters",
+                    )
+                    .to_compile_error()
+                    .into();
                 }
             }
             _ => {
-                return syn::Error::new_spanned(input, "#[function] does not support receiver parameters").to_compile_error().into();
+                return syn::Error::new_spanned(
+                    input,
+                    "#[function] does not support receiver parameters",
+                )
+                .to_compile_error()
+                .into();
             }
         }
     }
     if arity > 3 {
-        return syn::Error::new_spanned(&sig.inputs, "#[function] currently supports up to 3 parameters").to_compile_error().into();
+        return syn::Error::new_spanned(
+            &sig.inputs,
+            "#[function] currently supports up to 3 parameters",
+        )
+        .to_compile_error()
+        .into();
     }
 
     let name_str = ident.to_string();

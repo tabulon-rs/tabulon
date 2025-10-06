@@ -45,12 +45,42 @@ fn fold(ast: Ast) -> Ast {
                 (x, y) => Ast::Div(Box::new(x), Box::new(y)),
             }
         }
-        Ast::Eq(a, b) => cmp_fold(*a, *b, |x, y| (x == y) as i32 as f64, |a, b| Ast::Eq(Box::new(a), Box::new(b))),
-        Ast::Ne(a, b) => cmp_fold(*a, *b, |x, y| (x != y) as i32 as f64, |a, b| Ast::Ne(Box::new(a), Box::new(b))),
-        Ast::Lt(a, b) => cmp_fold(*a, *b, |x, y| (x < y) as i32 as f64, |a, b| Ast::Lt(Box::new(a), Box::new(b))),
-        Ast::Le(a, b) => cmp_fold(*a, *b, |x, y| (x <= y) as i32 as f64, |a, b| Ast::Le(Box::new(a), Box::new(b))),
-        Ast::Gt(a, b) => cmp_fold(*a, *b, |x, y| (x > y) as i32 as f64, |a, b| Ast::Gt(Box::new(a), Box::new(b))),
-        Ast::Ge(a, b) => cmp_fold(*a, *b, |x, y| (x >= y) as i32 as f64, |a, b| Ast::Ge(Box::new(a), Box::new(b))),
+        Ast::Eq(a, b) => cmp_fold(
+            *a,
+            *b,
+            |x, y| (x == y) as i32 as f64,
+            |a, b| Ast::Eq(Box::new(a), Box::new(b)),
+        ),
+        Ast::Ne(a, b) => cmp_fold(
+            *a,
+            *b,
+            |x, y| (x != y) as i32 as f64,
+            |a, b| Ast::Ne(Box::new(a), Box::new(b)),
+        ),
+        Ast::Lt(a, b) => cmp_fold(
+            *a,
+            *b,
+            |x, y| (x < y) as i32 as f64,
+            |a, b| Ast::Lt(Box::new(a), Box::new(b)),
+        ),
+        Ast::Le(a, b) => cmp_fold(
+            *a,
+            *b,
+            |x, y| (x <= y) as i32 as f64,
+            |a, b| Ast::Le(Box::new(a), Box::new(b)),
+        ),
+        Ast::Gt(a, b) => cmp_fold(
+            *a,
+            *b,
+            |x, y| (x > y) as i32 as f64,
+            |a, b| Ast::Gt(Box::new(a), Box::new(b)),
+        ),
+        Ast::Ge(a, b) => cmp_fold(
+            *a,
+            *b,
+            |x, y| (x >= y) as i32 as f64,
+            |a, b| Ast::Ge(Box::new(a), Box::new(b)),
+        ),
         Ast::And(a, b) => {
             let a = fold(*a);
             let b = fold(*b);

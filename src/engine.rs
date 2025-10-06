@@ -1,31 +1,41 @@
+use crate::ast::Ast;
+use crate::codegen::{VarLoadMode, codegen_expr};
 use crate::collect::collect_vars;
-use crate::codegen::{codegen_expr, VarLoadMode};
 use crate::error::JitError;
+#[cfg(feature = "optimize")]
+use crate::optimizer::optimize;
 use crate::parser::Parser;
 use crate::resolver::{IdentityResolver, VarResolver};
 use crate::rt_types::{Fn0, Fn1, Fn2, Fn3, JitFn, JitFnRef, RegisteredFn};
-use crate::ast::Ast;
-use cranelift::prelude::*;
 use cranelift::codegen::settings;
+use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module};
 use cranelift_native as native;
 use std::collections::HashMap;
-use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use uuid::Uuid;
-#[cfg(feature= "optimize")]
-use crate::optimizer::optimize;
 
 #[derive(Clone)]
 pub(crate) struct VarCache {
     values: Vec<Option<Value>>, // idx → 이미 로드된 SSA Value
 }
 impl VarCache {
-    pub fn new(n: usize) -> Self { Self { values: vec![None; n] } }
-    pub fn get(&self, i: usize) -> Option<Value> { self.values[i] }
-    pub fn set(&mut self, i: usize, v: Value) { self.values[i] = Some(v); }
+    pub fn new(n: usize) -> Self {
+        Self {
+            values: vec![None; n],
+        }
+    }
+    pub fn get(&self, i: usize) -> Option<Value> {
+        self.values[i]
+    }
+    pub fn set(&mut self, i: usize, v: Value) {
+        self.values[i] = Some(v);
+    }
 }
-
 
 pub struct Tabula<K = String, R = IdentityResolver> {
     pub(crate) resolver: R,
@@ -64,36 +74,75 @@ where
     }
 
     pub fn register_nullary(&mut self, name: &str, f: Fn0) -> Result<(), JitError> {
-        if self.module.is_some() { return Err(JitError::Internal("cannot register functions after JIT module is created; create a new Engine".into())); }
+        if self.module.is_some() {
+            return Err(JitError::Internal(
+                "cannot register functions after JIT module is created; create a new Engine".into(),
+            ));
+        }
         let key = (name.to_string(), 0);
-        if self.funcs.contains_key(&key) { return Err(JitError::FunctionExists { name: name.to_string(), arity: 0 }); }
+        if self.funcs.contains_key(&key) {
+            return Err(JitError::FunctionExists {
+                name: name.to_string(),
+                arity: 0,
+            });
+        }
         self.funcs.insert(key, RegisteredFn::Nullary(f));
         Ok(())
     }
     pub fn register_unary(&mut self, name: &str, f: Fn1) -> Result<(), JitError> {
-        if self.module.is_some() { return Err(JitError::Internal("cannot register functions after JIT module is created; create a new Engine".into())); }
+        if self.module.is_some() {
+            return Err(JitError::Internal(
+                "cannot register functions after JIT module is created; create a new Engine".into(),
+            ));
+        }
         let key = (name.to_string(), 1);
-        if self.funcs.contains_key(&key) { return Err(JitError::FunctionExists { name: name.to_string(), arity: 1 }); }
+        if self.funcs.contains_key(&key) {
+            return Err(JitError::FunctionExists {
+                name: name.to_string(),
+                arity: 1,
+            });
+        }
         self.funcs.insert(key, RegisteredFn::Unary(f));
         Ok(())
     }
     pub fn register_binary(&mut self, name: &str, f: Fn2) -> Result<(), JitError> {
-        if self.module.is_some() { return Err(JitError::Internal("cannot register functions after JIT module is created; create a new Engine".into())); }
+        if self.module.is_some() {
+            return Err(JitError::Internal(
+                "cannot register functions after JIT module is created; create a new Engine".into(),
+            ));
+        }
         let key = (name.to_string(), 2);
-        if self.funcs.contains_key(&key) { return Err(JitError::FunctionExists { name: name.to_string(), arity: 2 }); }
+        if self.funcs.contains_key(&key) {
+            return Err(JitError::FunctionExists {
+                name: name.to_string(),
+                arity: 2,
+            });
+        }
         self.funcs.insert(key, RegisteredFn::Binary(f));
         Ok(())
     }
     pub fn register_ternary(&mut self, name: &str, f: Fn3) -> Result<(), JitError> {
-        if self.module.is_some() { return Err(JitError::Internal("cannot register functions after JIT module is created; create a new Engine".into())); }
+        if self.module.is_some() {
+            return Err(JitError::Internal(
+                "cannot register functions after JIT module is created; create a new Engine".into(),
+            ));
+        }
         let key = (name.to_string(), 3);
-        if self.funcs.contains_key(&key) { return Err(JitError::FunctionExists { name: name.to_string(), arity: 3 }); }
+        if self.funcs.contains_key(&key) {
+            return Err(JitError::FunctionExists {
+                name: name.to_string(),
+                arity: 3,
+            });
+        }
         self.funcs.insert(key, RegisteredFn::Ternary(f));
         Ok(())
     }
 
     // --- Common helpers shared by compile and compile_ref ---
-    fn parse_and_resolve(&self, expr: &str) -> Result<(Ast, Vec<K>, HashMap<String, usize>), JitError> {
+    fn parse_and_resolve(
+        &self,
+        expr: &str,
+    ) -> Result<(Ast, Vec<K>, HashMap<String, usize>), JitError> {
         // Parse to AST
         let parser = Parser::new(expr)?;
         let ast = parser.parse()?;
@@ -108,7 +157,9 @@ where
         for name in raw_vars.iter() {
             let k = match self.resolver.resolve(name) {
                 Ok(v) => v,
-                Err(_) => { return Err(JitError::UnknownIdent(name.clone())); }
+                Err(_) => {
+                    return Err(JitError::UnknownIdent(name.clone()));
+                }
             };
             if let Some(&idx) = k_to_index.get(&k) {
                 var_index.insert(name.clone(), idx);
@@ -151,7 +202,6 @@ where
         Ok(())
     }
 
-
     fn build_and_finalize(
         &mut self,
         var_index: &HashMap<String, usize>,
@@ -189,7 +239,10 @@ where
             mf.set_readonly();
             mf.set_aligned();
             let mut cache = VarCache::new(ordered_len);
-            let load_mode2 = match load_mode { LoadMode::DirectF64 => VarLoadMode::DirectF64, LoadMode::IndirectPtr => VarLoadMode::IndirectPtr };
+            let load_mode2 = match load_mode {
+                LoadMode::DirectF64 => VarLoadMode::DirectF64,
+                LoadMode::IndirectPtr => VarLoadMode::IndirectPtr,
+            };
             let val = codegen_expr(
                 module,
                 &self.funcs,
@@ -221,18 +274,30 @@ where
 
     pub fn compile(&mut self, expr: &str) -> Result<CompiledExpr<K>, JitError> {
         let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
-        let code = self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::DirectF64)?;
+        let code =
+            self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::DirectF64)?;
         let func_ptr: JitFn = unsafe { std::mem::transmute(code) };
         let gen_at = self.generation.load(Ordering::Relaxed);
-        Ok(CompiledExpr::<K> { func_ptr, ordered_vars, gen_token: self.generation.clone(), gen_at_compile: gen_at })
+        Ok(CompiledExpr::<K> {
+            func_ptr,
+            ordered_vars,
+            gen_token: self.generation.clone(),
+            gen_at_compile: gen_at,
+        })
     }
 
     pub fn compile_ref(&mut self, expr: &str) -> Result<CompiledExprRef<K>, JitError> {
         let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
-        let code = self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::IndirectPtr)?;
+        let code =
+            self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::IndirectPtr)?;
         let func_ptr: JitFnRef = unsafe { std::mem::transmute(code) };
         let gen_at = self.generation.load(Ordering::Relaxed);
-        Ok(CompiledExprRef::<K> { func_ptr, ordered_vars, gen_token: self.generation.clone(), gen_at_compile: gen_at })
+        Ok(CompiledExprRef::<K> {
+            func_ptr,
+            ordered_vars,
+            gen_token: self.generation.clone(),
+            gen_at_compile: gen_at,
+        })
     }
 
     /// Free all JIT-allocated memory for compiled expressions and reset the JIT module.
@@ -240,7 +305,9 @@ where
     /// You can register functions again and recompile expressions.
     pub fn free_memory(&mut self) {
         if let Some(module) = self.module.take() {
-            unsafe { module.free_memory(); }
+            unsafe {
+                module.free_memory();
+            }
         }
         // bump generation to invalidate previously compiled expressions
         self.generation.fetch_add(1, Ordering::Relaxed);
@@ -260,7 +327,7 @@ pub struct CompiledExpr<K = String> {
     pub(crate) gen_at_compile: usize,
 }
 
-impl <K> CompiledExpr<K> {
+impl<K> CompiledExpr<K> {
     pub fn vars(&self) -> &[K] {
         &self.ordered_vars
     }
@@ -272,10 +339,9 @@ impl <K> CompiledExpr<K> {
         let out = unsafe { f(values.as_ptr() as *const f64) };
         Ok(out)
     }
-
 }
 
-impl <K> GenToken for CompiledExpr<K> {
+impl<K> GenToken for CompiledExpr<K> {
     fn gen_token(&self) -> usize {
         self.gen_token.load(Ordering::Relaxed)
     }
@@ -392,7 +458,7 @@ impl<K> CompiledExprRef<K> {
     }
 }
 
-impl <K> GenToken for CompiledExprRef<K>{
+impl<K> GenToken for CompiledExprRef<K> {
     fn gen_token(&self) -> usize {
         self.gen_token.load(Ordering::Relaxed)
     }
@@ -407,11 +473,16 @@ trait GenToken {
     fn gen_at_compile(&self) -> usize;
 }
 
-impl <G> CheckGen for G
-where G: GenToken {
+impl<G> CheckGen for G
+where
+    G: GenToken,
+{
     fn check_gen<T>(&self, arr: &[T], needed: usize) -> Result<(), JitError> {
         if arr.len() < needed {
-            return Err(JitError::ValuesLen { expected: needed, got: arr.len() });
+            return Err(JitError::ValuesLen {
+                expected: needed,
+                got: arr.len(),
+            });
         }
         if self.gen_token() != self.gen_at_compile() {
             return Err(JitError::Invalidated);
@@ -419,14 +490,14 @@ where G: GenToken {
 
         Ok(())
     }
-
 }
 
 trait CheckGen {
     fn check_gen<T>(&self, arr: &[T], needed: usize) -> Result<(), JitError>;
 }
 
-
-
 #[derive(Copy, Clone)]
-enum LoadMode { DirectF64, IndirectPtr }
+enum LoadMode {
+    DirectF64,
+    IndirectPtr,
+}

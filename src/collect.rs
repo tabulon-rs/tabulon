@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::ast::Ast;
+use std::collections::HashSet;
 
 pub(crate) fn collect_vars(ast: &Ast) -> Vec<String> {
     fn walk(node: &Ast, seen: &mut HashSet<String>, out: &mut Vec<String>) {
@@ -35,7 +35,9 @@ pub(crate) fn collect_vars(ast: &Ast) -> Vec<String> {
                 walk(e, seen, out);
             }
             Ast::Call { args, .. } => {
-                for a in args { walk(a, seen, out); }
+                for a in args {
+                    walk(a, seen, out);
+                }
             }
         }
     }
