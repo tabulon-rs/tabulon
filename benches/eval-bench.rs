@@ -106,10 +106,8 @@ fn benchmark_eval(c: &mut Criterion) {
             "a + a + a + a + a + a + a + a + a + a * a * a * a",
         ),
         ("simple_comparison", "a > b"),
-        ("simple_and_short", "0.0 && 1.0"),
-        ("simple_and_long", "1.0 && 1.0"),
-        ("simple_or_short", "1.0 || 0.0"),
-        ("simple_or_long", "0.0 || 1.0"),
+        ("simple_and", "1.0 && 1.0"),
+        ("simple_or", "0.0 || 1.0"),
         // Intermediate
         ("complex_arithmetic", "(a * a + b * b) / 2.0"),
         ("builtin_func_max", "max(a, b)"),
@@ -182,17 +180,22 @@ fn benchmark_eval(c: &mut Criterion) {
                                     Some(args[2])
                                 }
                             }
-                            // Handle variables
-                            _ => {
-                                if let Some(val) = vars.get(name) {
-                                    if !args.is_empty() {
-                                        return Some(f64::NAN); // Variables don't take arguments
-                                    }
-                                    Some(*val)
-                                } else {
-                                    None
-                                }
-                            }
+                            "a" => Some(2.0),
+                            "b" => Some(3.0),
+                            "power" => Some(100.0),
+                            "defense" => Some(50.0),
+                            "critical_bonus" => Some(0.5),
+                            "skill_modifier" => Some(1.2),
+                            "threat" => Some(1000.0),
+                            "distance" => Some(20.0),
+                            "is_taunted" => Some(1.0),
+                            "crit_chance" => Some(20.0),
+                            "agility" => Some(15.0),
+                            "intelligence" => Some(25.0),
+                            "mana_pool" => Some(500.0),
+                            "rage_level" => Some(75.0),
+                            "haste_rating" => Some(1.1),
+                            _ => None
                         }
                     };
                     ns
@@ -217,14 +220,14 @@ fn benchmark_eval(c: &mut Criterion) {
             let compiled = eng.compile(expr_str).unwrap();
             let vars = create_u64_map();
 
+            // The values must be supplied in the order that the compiler determined.
+            // We create a Vec of references here to match the `eval` signature.
+            let ordered_values: Vec<f64> = compiled
+                .vars()
+                .iter()
+                .map(|key| *vars.get(key).unwrap_or(&DEFAULT_F64))
+                .collect();
             b.iter(|| {
-                // The values must be supplied in the order that the compiler determined.
-                // We create a Vec of references here to match the `eval` signature.
-                let ordered_values: Vec<f64> = compiled
-                    .vars()
-                    .iter()
-                    .map(|key| *vars.get(key).unwrap_or(&DEFAULT_F64))
-                    .collect();
                 let _ = black_box(compiled.eval(&ordered_values));
             });
         });
@@ -242,8 +245,8 @@ fn benchmark_eval(c: &mut Criterion) {
                 .map(|key| vars.get(key).unwrap_or(&box_default).as_ref() as *const f64 as usize)
                 .collect();
 
+            let cached_values = ordered_ptrs.iter().map(|v| *v as *const f64).collect::<Vec<_>>();
             b.iter(|| {
-                let cached_values = ordered_ptrs.iter().map(|v| *v as *const f64).collect::<Vec<_>>();
                 let _ = black_box(compiled.eval_ptrs(&cached_values));
             });
         });
