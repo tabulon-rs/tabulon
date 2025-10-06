@@ -34,6 +34,11 @@ pub(crate) fn collect_vars(ast: &Ast) -> Vec<String> {
                 walk(t, seen, out);
                 walk(e, seen, out);
             }
+            Ast::Ifs(args) => {
+                for a in args {
+                    walk(a, seen, out);
+                }
+            }
             Ast::Call { args, .. } => {
                 for a in args {
                     walk(a, seen, out);

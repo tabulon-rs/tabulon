@@ -35,6 +35,8 @@ pub(crate) enum Ast {
     Or(Box<Ast>, Box<Ast>),
     /// 조건식 if(cond, then, else) — cond >= 1.0이면 then, cond == 0.0이면 else를 반환합니다.
     If(Box<Ast>, Box<Ast>, Box<Ast>),
+    /// 다중 조건식 ifs(cond1, then1, cond2, then2, ..., else)
+    Ifs(Vec<Box<Ast>>),
     /// 최대값 함수 max(a, b) — 두 인자 중 더 큰 값을 반환합니다.
     Max(Box<Ast>, Box<Ast>),
     /// 최소값 함수 min(a, b) — 두 인자 중 더 작은 값을 반환합니다.

@@ -1,5 +1,5 @@
 use crate::ast::Ast;
-use crate::codegen::{codegen_expr, F64Consts};
+use crate::codegen::{F64Consts, codegen_expr};
 use crate::collect::collect_vars;
 use crate::error::JitError;
 #[cfg(feature = "optimize")]
@@ -12,13 +12,13 @@ use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module};
 use cranelift_native as native;
+use log::debug;
 use std::collections::HashMap;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 use uuid::Uuid;
-use log::debug;
 
 pub struct Tabula<K = String, R = IdentityResolver> {
     pub(crate) resolver: R,
@@ -53,11 +53,14 @@ fn ast_needs_bool_consts(ast: &Ast) -> bool {
     match ast {
         Num(_) | Var(_) => false,
         Neg(x) => ast_needs_bool_consts(x),
-        Add(a,b) | Sub(a,b) | Mul(a,b) | Div(a,b) | Max(a,b) | Min(a,b) => {
+        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Max(a, b) | Min(a, b) => {
             ast_needs_bool_consts(a) || ast_needs_bool_consts(b)
         }
-        Eq(_, _) | Ne(_, _) | Lt(_, _) | Le(_, _) | Gt(_, _) | Ge(_, _) | And(_, _) | Or(_, _) => true,
+        Eq(_, _) | Ne(_, _) | Lt(_, _) | Le(_, _) | Gt(_, _) | Ge(_, _) | And(_, _) | Or(_, _) => {
+            true
+        }
         If(_, _, _) => true,
+        Ifs(_) => true,
         Call { args, .. } => args.iter().any(ast_needs_bool_consts),
     }
 }
@@ -143,12 +146,8 @@ where
         Ok(())
     }
 
-
     // --- Common helpers shared by compile and compile_ref ---
-    fn parse_and_resolve(
-        &self,
-        expr: &str,
-    ) -> Result<ParsedMeta<K>, JitError> {
+    fn parse_and_resolve(&self, expr: &str) -> Result<ParsedMeta<K>, JitError> {
         // Parse to AST
         let parser = Parser::new(expr)?;
         let ast = parser.parse()?;
@@ -268,7 +267,7 @@ where
             }
 
             // Lazy-constructed boolean constants provider bound to entry block.
-            let mut consts = F64Consts::new(block);
+            let mut consts = F64Consts::new();
             if ast_needs_bool_consts(ast) {
                 // Pre-initialize in entry block to avoid switching blocks later.
                 let _ = consts.one(&mut builder);
@@ -288,7 +287,7 @@ where
             builder.ins().return_(&[val]);
             builder.finalize();
         }
-        println!("JIT code\n{}", ctx.func.display());
+        debug!("JIT code\n{}", ctx.func.display());
 
         module
             .define_function(func_id, &mut ctx)

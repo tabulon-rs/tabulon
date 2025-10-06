@@ -111,6 +111,31 @@ fn fold(ast: Ast) -> Ast {
                 c => Ast::If(Box::new(c), Box::new(t), Box::new(e)),
             }
         }
+        Ast::Ifs(args) => {
+            let mut current_args: Vec<Ast> = args.into_iter().map(|a| fold(*a)).collect();
+            loop {
+                if current_args.len() < 3 {
+                    break;
+                }
+                match &current_args[0] {
+                    Ast::Num(x) if *x >= 1.0 => {
+                        return current_args.remove(1);
+                    }
+                    Ast::Num(x) if *x == 0.0 => {
+                        current_args.drain(0..2);
+                        continue;
+                    }
+                    _ => {
+                        break;
+                    }
+                }
+            }
+            if current_args.len() == 1 {
+                current_args.remove(0)
+            } else {
+                Ast::Ifs(current_args.into_iter().map(Box::new).collect())
+            }
+        }
         Ast::Max(a, b) => {
             let a = fold(*a);
             let b = fold(*b);

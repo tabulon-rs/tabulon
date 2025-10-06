@@ -161,6 +161,27 @@ impl<'a> Parser<'a> {
                     let else_e = self.or_expr()?;
                     self.expect(&Token::RParen)?;
                     Ok(Ast::If(Box::new(cond), Box::new(then_e), Box::new(else_e)))
+                } else if s == "ifs" {
+                    self.expect(&Token::LParen)?;
+                    let mut args = Vec::new();
+                    if !matches!(self.look, Token::RParen) {
+                        loop {
+                            let arg = self.or_expr()?;
+                            args.push(Box::new(arg));
+                            if matches!(self.look, Token::Comma) {
+                                self.bump()?;
+                                continue;
+                            }
+                            break;
+                        }
+                    }
+                    self.expect(&Token::RParen)?;
+                    if args.len() < 3 || args.len() % 2 == 0 {
+                        return Err(JitError::Parse(
+                            "IFS requires an odd number of arguments, with a minimum of 3.".into(),
+                        ));
+                    }
+                    Ok(Ast::Ifs(args))
                 } else if s == "max" {
                     self.expect(&Token::LParen)?;
                     let a = self.or_expr()?;
@@ -203,7 +224,7 @@ impl<'a> Parser<'a> {
                 Ok(e)
             }
             _ => Err(JitError::Parse(
-                "expected number, identifier, or '('".into(),
+                "expected number, identifier, or \'(\'".into(),
             )),
         }
     }

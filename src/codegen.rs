@@ -9,24 +9,30 @@ use std::collections::HashMap;
 
 #[derive(Copy, Clone)]
 pub(crate) struct F64Consts {
-    entry: Block,
     one: Option<Value>,
     zero: Option<Value>,
 }
 
 impl F64Consts {
-    pub fn new(entry: Block) -> Self {
-        Self { entry, one: None, zero: None }
+    pub fn new() -> Self {
+        Self {
+            one: None,
+            zero: None,
+        }
     }
     pub fn one<'a>(&mut self, builder: &mut FunctionBuilder<'a>) -> Value {
-        if let Some(v) = self.one { return v; }
+        if let Some(v) = self.one {
+            return v;
+        }
         // Create in the current block; engine pre-inits in entry when needed
         let v = builder.ins().f64const(1.0);
         self.one = Some(v);
         v
     }
     pub fn zero<'a>(&mut self, builder: &mut FunctionBuilder<'a>) -> Value {
-        if let Some(v) = self.zero { return v; }
+        if let Some(v) = self.zero {
+            return v;
+        }
         // Create in the current block; engine pre-inits in entry when needed
         let v = builder.ins().f64const(0.0);
         self.zero = Some(v);
@@ -53,79 +59,123 @@ pub(crate) fn codegen_expr<'a>(
             Ok(var_vals[idx])
         }
         Ast::Neg(x) => {
-            let v = codegen_expr(module, registry, builder, var_index, var_vals, x, f64_ty, consts)?;
+            let v = codegen_expr(
+                module, registry, builder, var_index, var_vals, x, f64_ty, consts,
+            )?;
             Ok(builder.ins().fneg(v))
         }
         Ast::Add(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             Ok(builder.ins().fadd(va, vb))
         }
         Ast::Sub(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             Ok(builder.ins().fsub(va, vb))
         }
         Ast::Mul(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             Ok(builder.ins().fmul(va, vb))
         }
         Ast::Div(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             Ok(builder.ins().fdiv(va, vb))
         }
         Ast::Eq(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let cmp = builder.ins().fcmp(FloatCC::Equal, va, vb);
             let one = consts.one(builder);
             let zero = consts.zero(builder);
             Ok(builder.ins().select(cmp, one, zero))
         }
         Ast::Ne(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let cmp = builder.ins().fcmp(FloatCC::NotEqual, va, vb);
             let one = consts.one(builder);
             let zero = consts.zero(builder);
             Ok(builder.ins().select(cmp, one, zero))
         }
         Ast::Lt(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let cmp = builder.ins().fcmp(FloatCC::LessThan, va, vb);
             let one = consts.one(builder);
             let zero = consts.zero(builder);
             Ok(builder.ins().select(cmp, one, zero))
         }
         Ast::Le(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let cmp = builder.ins().fcmp(FloatCC::LessThanOrEqual, va, vb);
             let one = consts.one(builder);
             let zero = consts.zero(builder);
             Ok(builder.ins().select(cmp, one, zero))
         }
         Ast::Gt(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let cmp = builder.ins().fcmp(FloatCC::GreaterThan, va, vb);
             let one = consts.one(builder);
             let zero = consts.zero(builder);
             Ok(builder.ins().select(cmp, one, zero))
         }
         Ast::Ge(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let cmp = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, va, vb);
             let one = consts.one(builder);
             let zero = consts.zero(builder);
             Ok(builder.ins().select(cmp, one, zero))
         }
         Ast::And(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
             let zero = consts.zero(builder);
             let a_true = builder.ins().fcmp(FloatCC::NotEqual, va, zero);
 
@@ -139,7 +189,9 @@ pub(crate) fn codegen_expr<'a>(
             builder.seal_block(else_block);
 
             builder.switch_to_block(rhs_block);
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let b_true = builder.ins().fcmp(FloatCC::NotEqual, vb, zero);
             let one = consts.one(builder);
             let rhs_val = builder.ins().select(b_true, one, zero);
@@ -160,10 +212,14 @@ pub(crate) fn codegen_expr<'a>(
             let one = consts.one(builder);
             let zero = consts.zero(builder);
 
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
             let is_a_true = builder.ins().fcmp(FloatCC::NotEqual, va, zero);
 
-            builder.ins().brif(is_a_true, true_block, &[], rhs_block, &[]);
+            builder
+                .ins()
+                .brif(is_a_true, true_block, &[], rhs_block, &[]);
             builder.seal_block(true_block);
             builder.seal_block(rhs_block);
 
@@ -171,10 +227,14 @@ pub(crate) fn codegen_expr<'a>(
             builder.ins().jump(merge_block, &[BlockArg::Value(one)]);
 
             builder.switch_to_block(rhs_block);
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             let is_b_true = builder.ins().fcmp(FloatCC::NotEqual, vb, zero);
             let b_result = builder.ins().select(is_b_true, one, zero);
-            builder.ins().jump(merge_block, &[BlockArg::Value(b_result)]);
+            builder
+                .ins()
+                .jump(merge_block, &[BlockArg::Value(b_result)]);
 
             builder.seal_block(merge_block);
             builder.switch_to_block(merge_block);
@@ -186,7 +246,9 @@ pub(crate) fn codegen_expr<'a>(
             let merge_block = builder.create_block();
             let res = builder.append_block_param(merge_block, f64_ty);
 
-            let vc = codegen_expr(module, registry, builder, var_index, var_vals, c, f64_ty, consts)?;
+            let vc = codegen_expr(
+                module, registry, builder, var_index, var_vals, c, f64_ty, consts,
+            )?;
             let one = consts.one(builder);
             let cond = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, vc, one);
 
@@ -195,31 +257,90 @@ pub(crate) fn codegen_expr<'a>(
             builder.seal_block(else_block);
 
             builder.switch_to_block(then_block);
-            let vt = codegen_expr(module, registry, builder, var_index, var_vals, t, f64_ty, consts)?;
+            let vt = codegen_expr(
+                module, registry, builder, var_index, var_vals, t, f64_ty, consts,
+            )?;
             builder.ins().jump(merge_block, &[BlockArg::Value(vt)]);
 
             builder.switch_to_block(else_block);
-            let ve = codegen_expr(module, registry, builder, var_index, var_vals, e, f64_ty, consts)?;
+            let ve = codegen_expr(
+                module, registry, builder, var_index, var_vals, e, f64_ty, consts,
+            )?;
             builder.ins().jump(merge_block, &[BlockArg::Value(ve)]);
 
             builder.seal_block(merge_block);
             builder.switch_to_block(merge_block);
             Ok(res)
         }
+        Ast::Ifs(args) => {
+            let merge_block = builder.create_block();
+            let res = builder.append_block_param(merge_block, f64_ty);
+
+            let mut arg_chunks = args.chunks_exact(2);
+
+            while let Some(chunk) = arg_chunks.next() {
+                let cond_ast = &chunk[0];
+                let then_ast = &chunk[1];
+
+                let then_block = builder.create_block();
+                let next_cond_block = builder.create_block();
+
+                let vc = codegen_expr(
+                    module, registry, builder, var_index, var_vals, cond_ast, f64_ty, consts,
+                )?;
+                let one = consts.one(builder);
+                let cond = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, vc, one);
+
+                builder
+                    .ins()
+                    .brif(cond, then_block, &[], next_cond_block, &[]);
+                builder.seal_block(then_block);
+
+                builder.switch_to_block(then_block);
+                let vt = codegen_expr(
+                    module, registry, builder, var_index, var_vals, then_ast, f64_ty, consts,
+                )?;
+                builder.ins().jump(merge_block, &[BlockArg::Value(vt)]);
+
+                builder.seal_block(next_cond_block);
+                builder.switch_to_block(next_cond_block);
+            }
+
+            let else_ast = arg_chunks.remainder().get(0).unwrap();
+            let v_else = codegen_expr(
+                module, registry, builder, var_index, var_vals, else_ast, f64_ty, consts,
+            )?;
+            builder.ins().jump(merge_block, &[BlockArg::Value(v_else)]);
+
+            builder.seal_block(merge_block);
+            builder.switch_to_block(merge_block);
+            Ok(res)
+        }
         Ast::Max(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             Ok(builder.ins().fmax(va, vb))
         }
         Ast::Min(a, b) => {
-            let va = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
-            let vb = codegen_expr(module, registry, builder, var_index, var_vals, b, f64_ty, consts)?;
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
             Ok(builder.ins().fmin(va, vb))
         }
         Ast::Call { name, args } => {
             let arity = args.len() as u8;
             if !registry.contains_key(&(name.clone(), arity)) {
-                return Err(JitError::UnknownFunction { name: name.clone(), arity });
+                return Err(JitError::UnknownFunction {
+                    name: name.clone(),
+                    arity,
+                });
             }
             let mut ext_sig = module.make_signature();
             for _ in 0..arity {
@@ -233,7 +354,9 @@ pub(crate) fn codegen_expr<'a>(
             let callee_ref = module.declare_func_in_func(callee_id, builder.func);
             let mut argv: Vec<Value> = Vec::with_capacity(args.len());
             for a in args {
-                let v = codegen_expr(module, registry, builder, var_index, var_vals, a, f64_ty, consts)?;
+                let v = codegen_expr(
+                    module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+                )?;
                 argv.push(v);
             }
             let call = builder.ins().call(callee_ref, &argv);
@@ -242,4 +365,3 @@ pub(crate) fn codegen_expr<'a>(
         }
     }
 }
-

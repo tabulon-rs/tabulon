@@ -85,6 +85,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Built-in Functions and Operators
+
+`tabulon` supports a rich set of built-in operators and functions.
+
+### Operators
+
+| Category      | Operators                               | Description                                                              |
+|---------------|-----------------------------------------|--------------------------------------------------------------------------|
+| **Arithmetic**| `+`, `-`, `*`, `/`                      | Addition, Subtraction, Multiplication, Division.                         |
+| **Comparison**| `==`, `!=`, `>`, `>=`, `<`, `<=`          | Equal, Not Equal, Greater Than, Greater/Equal, Less Than, Less/Equal.    |
+| **Logical**   | `&&` (and), `||` (or)                   | Evaluates logical AND and OR. Both operators are short-circuiting.       |
+| **Unary**     | `-`                                     | Negates a value (e.g., `-x`).                                            |
+
+### Built-in Functions & Constructs
+
+Boolean logic in `tabulon` follows the convention where `1.0` is `true` and `0.0` is `false`.
+
+| Name                     | Signature                                       | Description                                                                                                                                |
+|--------------------------|-------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| **if**                   | `if(condition, then_expr, else_expr)`           | If `condition` evaluates to true (`1.0`), returns `then_expr`, otherwise returns `else_expr`. This is short-circuiting.                      |
+| **ifs**                  | `ifs(cond1, then1, cond2, then2, ..., else_val)` | Evaluates multiple conditions in order. Returns the value corresponding to the first true condition. If all are false, returns `else_val`. |
+| **min**                  | `min(a, b)`                                     | Returns the smaller of the two numbers `a` and `b`.                                                                                        |
+| **max**                  | `max(a, b)`                                     | Returns the larger of the two numbers `a` and `b`.                                                                                         |
+
+#### Examples
+
+```rust
+use tabulon::Tabula;
+
+let mut engine = Tabula::new();
+
+// Using the `if` function
+let expr_if = engine.compile("if(health > 50, 100, 20)").unwrap();
+let health = 75.0;
+assert_eq!(expr_if.eval(&[&health]).unwrap(), 100.0);
+
+// Using `ifs` for multiple conditions
+let expr_ifs = engine.compile("ifs(score > 90, 1, score > 50, 0.5, 0)").unwrap();
+let score = 70.0;
+assert_eq!(expr_ifs.eval(&[&score]).unwrap(), 0.5);
+
+// Using `min` and `max`
+let expr_minmax = engine.compile("min(max(a, b), 100)").unwrap();
+let a = 50.0;
+let b = 120.0;
+assert_eq!(expr_minmax.eval(&[&a, &b]).unwrap(), 100.0);
+```
+
 ## Performance
 
 `tabulon` is designed for speed. By compiling expressions down to a few simple machine instructions, it can evaluate them orders of magnitude faster than a tree-walking interpreter. Benchmarks are included in the repository (`cargo bench`).

@@ -12,6 +12,39 @@ fn expr_mul_add() {
 }
 
 #[test]
+fn expr_subtraction() {
+    let mut eng = Tabula::new();
+    let e = eng.compile_ref("a - b").unwrap();
+    let a = 10.0;
+    let b = 3.0;
+    assert_eq!(e.eval(&[&a, &b]).unwrap(), 7.0);
+}
+
+#[test]
+fn expr_multiplication() {
+    let mut eng = Tabula::new();
+    let e = eng.compile_ref("a * b").unwrap();
+    let a = 7.0;
+    let b = 6.0;
+    assert_eq!(e.eval(&[&a, &b]).unwrap(), 42.0);
+}
+
+#[test]
+fn expr_unary_minus() {
+    let mut eng = Tabula::new();
+    let e1 = eng.compile_ref("-5").unwrap();
+    assert_eq!(e1.eval(&[]).unwrap(), -5.0);
+
+    let e2 = eng.compile_ref("-a").unwrap();
+    let a = 10.0;
+    assert_eq!(e2.eval(&[&a]).unwrap(), -10.0);
+
+    let e3 = eng.compile_ref("b + -a").unwrap();
+    let b = 20.0;
+    assert_eq!(e3.eval(&[&b, &a]).unwrap(), 10.0);
+}
+
+#[test]
 fn expr_eq() {
     let expr = "A == B";
     let mut eng = Tabula::new();
@@ -132,6 +165,21 @@ fn expr_builtin_max_constants() {
 }
 
 #[test]
+fn expr_builtin_min_constants() {
+    let mut eng = Tabula::new();
+    let e1 = eng.compile_ref("min(1, 2) == 1").unwrap();
+    assert_eq!(e1.eval(&[]).unwrap(), 1.0);
+
+    let e2 = eng.compile_ref("min(-1, 0) == -1").unwrap();
+    assert_eq!(e2.eval(&[]).unwrap(), 1.0);
+
+    let e3 = eng
+        .compile_ref("min(1.1111111111111, 1.1111111111112) == 1.1111111111111")
+        .unwrap();
+    assert_eq!(e3.eval(&[]).unwrap(), 1.0);
+}
+
+#[test]
 fn expr_many_vars() {
     let mut eng = Tabula::new();
     let a = 1.0;
@@ -144,4 +192,63 @@ fn expr_many_vars() {
     let h = 8.0;
     let e1 = eng.compile_ref("A + B + C + D + E + F + G + H").unwrap();
     assert_eq!(e1.eval(&[&a, &b, &c, &d, &e, &f, &g, &h]).unwrap(), 36.0);
+}
+
+#[test]
+fn expr_ifs() {
+    let mut eng = Tabula::new();
+
+    // Case 1: First condition is true
+    let e1 = eng.compile_ref("ifs(1, 10, 0, 20, 30)").unwrap();
+    assert_eq!(e1.eval(&[]).unwrap(), 10.0);
+
+    // Case 2: Second condition is true
+    let e2 = eng.compile_ref("ifs(0, 10, 1, 20, 30)").unwrap();
+    assert_eq!(e2.eval(&[]).unwrap(), 20.0);
+
+    // Case 3: No condition is true, default value
+    let e3 = eng.compile_ref("ifs(0, 10, 0, 20, 30)").unwrap();
+    assert_eq!(e3.eval(&[]).unwrap(), 30.0);
+
+    // Case 4: With variables
+    let a = 5.0;
+    let b = 4.0;
+    let c = 3.0;
+    let d = 2.0;
+    let e4 = eng.compile_ref("ifs(A > B, 100, C > D, 200, 300)").unwrap();
+    assert_eq!(e4.eval(&[&a, &b, &c, &d]).unwrap(), 100.0);
+
+    let e5 = eng.compile_ref("ifs(A < B, 100, C > D, 200, 300)").unwrap();
+    assert_eq!(e5.eval(&[&a, &b, &c, &d]).unwrap(), 200.0);
+
+    let e6 = eng.compile_ref("ifs(A < B, 100, C < D, 200, 300)").unwrap();
+    assert_eq!(e6.eval(&[&a, &b, &c, &d]).unwrap(), 300.0);
+
+    // Case 5: More conditions
+    let e7 = eng.compile_ref("ifs(0, 1, 0, 2, 0, 3, 0, 4, 5)").unwrap();
+    assert_eq!(e7.eval(&[]).unwrap(), 5.0);
+
+    let e8 = eng.compile_ref("ifs(0, 1, 0, 2, 1, 3, 0, 4, 5)").unwrap();
+    assert_eq!(e8.eval(&[]).unwrap(), 3.0);
+}
+
+#[test]
+fn expr_ifs_invalid_args() {
+    let mut eng = Tabula::new();
+
+    // Even number of args
+    let res1 = eng.compile_ref("ifs(1, 2)");
+    assert!(res1.is_err());
+
+    // Even number of args
+    let res2 = eng.compile_ref("ifs(1, 2, 3, 4)");
+    assert!(res2.is_err());
+
+    // No args
+    let res3 = eng.compile_ref("ifs()");
+    assert!(res3.is_err());
+
+    // One arg
+    let res4 = eng.compile_ref("ifs(1)");
+    assert!(res4.is_err());
 }
