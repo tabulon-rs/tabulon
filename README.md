@@ -23,34 +23,34 @@ A high-performance, JIT-compiled expression evaluation engine for Rust, built on
 
 Use the engine to compile and evaluate an expression:
 
-    ```rust
-    use tabulon::Tabula;
+  ```rust
+  use tabulon::Tabula;
 
-    fn main() -> Result<(), Box<dyn std::error::Error>> {
-        // Create a new engine instance
-        let mut engine = Tabula::new();
+  fn main() -> Result<(), Box<dyn std::error::Error>> {
+      // Create a new engine instance
+      let mut engine = Tabula::new();
 
-        // Compile an expression
-        let expr = engine.compile("power > 9000 && is_angry * 10")?;
+      // Compile an expression
+      let expr = engine.compile("power > 9000 && is_angry * 10")?;
 
-        // `ordered_vars` shows the order variables must be supplied in.
-        // Here it would be: ["power", "is_angry"]
-        assert_eq!(expr.vars(), &["power", "is_angry"]);
+      // `ordered_vars` shows the order variables must be supplied in.
+      // Here it would be: ["power", "is_angry"]
+      assert_eq!(expr.vars(), &["power", "is_angry"]);
 
-        // Prepare variables for evaluation
-        let power_level = 9001.0;
-        let is_angry_val = 1.0; // Use 1.0 for true, 0.0 for false
+      // Prepare variables for evaluation
+      let power_level = 9001.0;
+      let is_angry_val = 1.0; // Use 1.0 for true, 0.0 for false
 
-        // `eval` takes a slice of pointers to your f64 variables
-        let result = expr.eval(&[&power_level, &is_angry_val])?;
+      // `eval` takes a slice of pointers to your f64 variables
+      let result = expr.eval(&[&power_level, &is_angry_val])?;
 
-        // The expression "(9001 > 9000) && (1.0 * 10)" is true, so the result is 1.0.
-        assert_eq!(result, 1.0);
-        println!("It's over 9000! Result: {}", result);
+      // The expression "(9001 > 9000) && (1.0 * 10)" is true, so the result is 1.0.
+      assert_eq!(result, 1.0);
+      println!("It's over 9000! Result: {}", result);
 
-        Ok(())
-    }
-    ```
+      Ok(())
+  }
+  ```
 
 ## Custom Functions
 
