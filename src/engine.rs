@@ -20,6 +20,24 @@ use std::sync::{
 };
 use uuid::Uuid;
 
+/// The main JIT compilation and evaluation engine.
+///
+/// `Tabula` is the entry point for parsing, compiling, and evaluating expressions.
+/// It holds the JIT compiler context, registered functions, and a variable resolver.
+///
+/// The type parameters `K` and `R` define the variable key type and the resolver logic,
+/// respectively. By default, it uses `String` keys.
+///
+/// # Examples
+///
+/// ```
+/// use tabulon::Tabula;
+///
+/// let mut engine = Tabula::new();
+/// let expr = engine.compile("a + b").unwrap();
+/// let result = expr.eval(&[10.0, 20.0]).unwrap();
+/// assert_eq!(result, 30.0);
+/// ```
 pub struct Tabula<K = String, R = IdentityResolver> {
     pub(crate) resolver: R,
     pub(crate) _phantom: std::marker::PhantomData<K>,
@@ -35,6 +53,9 @@ impl Default for Tabula<String, IdentityResolver> {
 }
 
 impl Tabula<String, IdentityResolver> {
+    /// Creates a new `Tabula` engine with the default configuration.
+    ///
+    /// The default engine uses `String` keys for variables and resolves them to themselves.
     pub fn new() -> Self {
         Self {
             resolver: IdentityResolver,
@@ -70,7 +91,32 @@ where
     K: Clone + Eq + std::hash::Hash + Send + Sync + 'static,
     R: VarResolver<K>,
 {
-    /// Create an Engine with a custom variable key resolver.
+    /// Creates a new `Tabula` engine with a custom variable resolver.
+    ///
+    /// This allows you to define custom logic for mapping variable names from expression strings
+    /// to a key type `K` of your choice (e.g., a u64, an enum, etc.).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tabulon::{Tabula, VarResolver, VarResolveError};
+    ///
+    /// // A resolver that maps "strength" to key 1 and "dexterity" to key 2.
+    /// struct MyResolver;
+    /// impl VarResolver<u32> for MyResolver {
+    ///     fn resolve(&self, ident: &str) -> Result<u32, VarResolveError> {
+    ///         match ident {
+    ///             "strength" => Ok(1),
+    ///             "dexterity" => Ok(2),
+    ///             _ => Err(VarResolveError::Unknown(ident.to_string())),
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut engine = Tabula::with_resolver(MyResolver);
+    /// let expr = engine.compile("strength * 2").unwrap();
+    /// assert_eq!(expr.vars(), &[1]);
+    /// ```
     pub fn with_resolver(resolver: R) -> Self {
         Self {
             resolver,
@@ -81,6 +127,9 @@ where
         }
     }
 
+    /// Registers a nullary (0-argument) function with the engine.
+    ///
+    /// Functions must be registered before any expressions are compiled.
     pub fn register_nullary(&mut self, name: &str, f: Fn0) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
@@ -97,6 +146,7 @@ where
         self.funcs.insert(key, RegisteredFn::Nullary(f));
         Ok(())
     }
+    /// Registers a unary (1-argument) function with the engine.
     pub fn register_unary(&mut self, name: &str, f: Fn1) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
@@ -113,6 +163,25 @@ where
         self.funcs.insert(key, RegisteredFn::Unary(f));
         Ok(())
     }
+    /// Registers a binary (2-argument) function with the engine.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tabulon::Tabula;
+    ///
+    /// fn my_pow(base: f64, exp: f64) -> f64 {
+    ///     base.powf(exp)
+    /// }
+    ///
+    /// let mut engine = Tabula::new();
+    /// // The function must be registered before compiling any expressions.
+    /// engine.register_binary("my_pow", my_pow).unwrap();
+    ///
+    /// let expr = engine.compile("my_pow(a, 3)").unwrap();
+    /// let result = expr.eval(&[2.0]).unwrap();
+    /// assert_eq!(result, 8.0);
+    /// ```
     pub fn register_binary(&mut self, name: &str, f: Fn2) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
@@ -129,6 +198,7 @@ where
         self.funcs.insert(key, RegisteredFn::Binary(f));
         Ok(())
     }
+    /// Registers a ternary (3-argument) function with the engine.
     pub fn register_ternary(&mut self, name: &str, f: Fn3) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
@@ -301,6 +371,14 @@ where
         Ok(code)
     }
 
+    /// Compiles an expression string into an executable `CompiledExpr`.
+    ///
+    /// This method parses, optimizes, and JIT-compiles the expression to native machine code.
+    /// The returned `CompiledExpr` owns the compiled code and the variable map.
+    /// Evaluation is performed by passing a slice of `f64` values.
+    ///
+    /// # Errors
+    /// Returns a `JitError` if parsing, resolution, or compilation fails.
     pub fn compile(&mut self, expr: &str) -> Result<CompiledExpr<K>, JitError> {
         let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
         let code =
@@ -315,6 +393,14 @@ where
         })
     }
 
+    /// Compiles an expression string into an executable `CompiledExprRef`.
+    ///
+    /// This is similar to `compile`, but is designed for evaluation via pointers/references.
+    /// The returned `CompiledExprRef` is tied to the lifetime of the `Tabula` engine.
+    /// Evaluation is performed by passing a slice of `&f64` or `*const f64`.
+    ///
+    /// # Errors
+    /// Returns a `JitError` if parsing, resolution, or compilation fails.
     pub fn compile_ref(&mut self, expr: &str) -> Result<CompiledExprRef<K>, JitError> {
         let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
         let code =
@@ -329,9 +415,30 @@ where
         })
     }
 
-    /// Free all JIT-allocated memory for compiled expressions and reset the JIT module.
-    /// After calling this, previously compiled CompiledExpr pointers become invalid and must not be used.
-    /// You can register functions again and recompile expressions.
+    /// Frees all JIT-allocated memory for compiled expressions and resets the JIT module.
+    ///
+    /// After calling this, any previously created `CompiledExpr` or `CompiledExprRef` instances
+    /// become invalid and attempting to use them will result in an `JitError::Invalidated` error.
+    /// This is useful for reclaiming memory in long-running applications.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tabulon::{Tabula, JitError};
+    ///
+    /// let mut engine = Tabula::new();
+    /// let expr = engine.compile("a + 1").unwrap();
+    /// assert_eq!(expr.eval(&[5.0]).unwrap(), 6.0);
+    ///
+    /// // Free all compiled code
+    /// engine.free_memory();
+    ///
+    /// // Evaluating the old expression now returns an error
+    /// match expr.eval(&[5.0]) {
+    ///     Err(JitError::Invalidated) => { /* This is expected */ },
+    ///     _ => panic!("Expected an Invalidated error"),
+    /// }
+    /// ```
     pub fn free_memory(&mut self) {
         if let Some(module) = self.module.take() {
             unsafe {
@@ -342,13 +449,19 @@ where
         self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Clear the custom function registry. Call `free_memory` first if a module exists.
-    /// This allows re-registering a different function set before recompiling expressions.
+    /// Clears the custom function registry.
+    ///
+    /// This allows re-registering a different set of functions before compiling new expressions.
+    /// Note: This should typically be called after `free_memory` if expressions have already been compiled.
     pub fn clear_registered_functions(&mut self) {
         self.funcs.clear();
     }
 }
 
+/// A compiled, executable expression that owns its variable map.
+///
+/// Created by [`Tabula::compile`].
+/// Evaluation requires passing a slice of `f64` values.
 pub struct CompiledExpr<K = String> {
     pub(crate) func_ptr: JitFn,
     pub(crate) ordered_vars: Vec<K>,
@@ -357,10 +470,18 @@ pub struct CompiledExpr<K = String> {
 }
 
 impl<K> CompiledExpr<K> {
+    /// Returns a slice of variable keys in the order they must be supplied for evaluation.
     pub fn vars(&self) -> &[K] {
         &self.ordered_vars
     }
 
+    /// Evaluates the compiled expression with the given values.
+    ///
+    /// The `values` slice must provide `f64` values in the exact order specified by `vars()`.
+    ///
+    /// # Errors
+    /// - `JitError::ValuesLen` if `values.len()` is less than `self.vars().len()`.
+    /// - `JitError::Invalidated` if the expression was invalidated by `Tabula::free_memory`.
     pub fn eval(&self, values: &[f64]) -> Result<f64, JitError> {
         let needed = self.ordered_vars.len();
         self.check_gen(values, needed)?;
@@ -380,6 +501,11 @@ impl<K> GenToken for CompiledExpr<K> {
     }
 }
 
+/// A compiled, executable expression that is evaluated via references or pointers.
+///
+/// Created by [`Tabula::compile_ref`].
+/// This version is optimized for evaluation methods that use pointers (`eval` and `eval_ptrs`),
+/// which can be slightly more efficient if the underlying data is not contiguous.
 #[derive(Clone)]
 pub struct CompiledExprRef<K = String> {
     pub(crate) func_ptr: JitFnRef,
@@ -389,10 +515,34 @@ pub struct CompiledExprRef<K = String> {
 }
 
 impl<K> CompiledExprRef<K> {
+    /// Returns a slice of variable keys in the order they must be supplied for evaluation.
     pub fn vars(&self) -> &[K] {
         &self.ordered_vars
     }
 
+    /// Evaluates the compiled expression with the given values (as references).
+    ///
+    /// The `values` slice must provide `&f64` references in the exact order specified by `vars()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tabulon::Tabula;
+    ///
+    /// let mut engine = Tabula::new();
+    /// let expr = engine.compile_ref("a * b").unwrap();
+    ///
+    /// let a = 10.0;
+    /// let b = 5.5;
+    ///
+    /// // Pass values as a slice of references
+    /// let result = expr.eval(&[&a, &b]).unwrap();
+    /// assert_eq!(result, 55.0);
+    /// ```
+    ///
+    /// # Errors
+    /// - `JitError::ValuesLen` if `values.len()` is less than `self.vars().len()`.
+    /// - `JitError::Invalidated` if the expression was invalidated by `Tabula::free_memory`.
     pub fn eval(&self, values: &[&f64]) -> Result<f64, JitError> {
         let needed = self.ordered_vars.len();
         self.check_gen(values, needed)?;
@@ -403,87 +553,12 @@ impl<K> CompiledExprRef<K> {
 
     /// Evaluates this compiled expression using raw pointers to `f64` inputs.
     ///
-    /// This API is intended for integration scenarios (e.g., ECS or FFI) where caching Rust
-    /// references across boundaries is inconvenient or impossible. You can keep
-    /// stable addresses to your values (for example, by storing them in `Box<f64>` or an
-    /// arena) and pass those addresses here as `*const f64`.
+    /// This is an advanced, unsafe API for integrations (e.g., FFI) where holding references
+    /// is not feasible. Pointers must be valid and point to live `f64` data.
     ///
-    /// Compared to [`eval`](#method.eval), this avoids holding `&f64` references; the JIT
-    /// only reads from the pointed-to values and never writes to them.
-    ///
-    /// Length requirements:
-    /// - `ptrs.len()` must be at least `self.vars().len()`. Extra pointers (if any) are ignored.
-    ///
-    /// Errors:
-    /// - [`JitError::ValuesLen`] if not enough pointers are provided.
-    /// - [`JitError::Invalidated`] if the underlying JIT memory was freed via [`Tabula::free_memory`].
-    ///
-    /// Safety:
-    /// - WARNING: This method accepts raw pointers and therefore bypasses Rust's lifetime/borrow
-    ///   checking. The compiler cannot verify correctness here; misuse can cause undefined behavior,
-    ///   including crashes or memory corruption. Treat pointer construction as an unsafe boundary.
-    /// - Each pointer in `ptrs` must be non-null, properly aligned, and point to a valid `f64`.
-    /// - The pointed-to memory must remain alive and unmoved for the entire duration of this call.
-    ///   In practice, prefer storing values in `Box<f64>`, `Box<[f64]>`, or another allocation with a
-    ///   stable address, and update them in place instead of replacing the allocation.
-    /// - Do not call this method after the engine has invalidated compiled code (see [`Tabula::free_memory`]).
-    ///
-    /// Pointer safety checklist
-    /// - Prefer not to cache pointers long-term; build them right before calling `eval_ptrs`.
-    /// - If you must cache, ensure addresses are stable (e.g., store values in `Box<f64>` and update in place).
-    /// - Avoid storing addresses in integer types; keep them as `*const f64` (or `NonNull<f64>` in your code) to make intent clear.
-    /// - If using a `Vec<f64>`, avoid reallocation while pointers are in use (e.g., reserve upfront); or use `Box<[f64]>` for a fixed-size set.
-    ///
-    /// Example (simple)
-    /// ----------------
-    /// ```
-    /// use tabulon::{Tabula, JitError};
-    /// # fn main() -> Result<(), JitError> {
-    /// let mut engine = Tabula::new();
-    /// let compiled = engine.compile_ref("a + b * 2")?;
-    /// let a = 3.0;
-    /// let b = 4.5;
-    /// let ptrs: [*const f64; 2] = [&a as *const f64, &b as *const f64];
-    /// let out = compiled.eval_ptrs(&ptrs)?;
-    /// assert!((out - (3.0 + 4.5 * 2.0)).abs() < 1e-12);
-    /// # Ok(()) }
-    /// ```
-    ///
-    /// Example (practical: reuse a stable array and rebuild pointers per call)
-    /// ----------------------------------------------------------------------
-    /// This pattern avoids caching pointers by keeping values in a fixed-size `Box<[f64]>` and
-    /// rebuilding a `Vec<*const f64>` right before each evaluation. The order matches
-    /// `compiled.vars()`.
-    /// ```
-    /// use tabulon::{Tabula, JitError};
-    /// # fn main() -> Result<(), JitError> {
-    /// let mut map = HashMap::new();
-    /// map.insert(1, Box::new(2f64));
-    /// let mut cache = Vec::new();
-    /// let resolver = U64Resolver;
-    ///
-    /// let mut engine = Tabula::with_resolver(resolver);
-    /// let compiled = engine.compile("a + 10").unwrap();
-    /// let vec = compiled.vars().iter().map(|v| {
-    ///         let bx: &Box<f64> = map.get(v).unwrap();
-    ///         bx.as_ref() as *const f64 as usize
-    ///     }).collect::<Vec<_>>();
-    /// cache.extend(vec.iter().copied());
-    /// let vars = vec.iter().map(|v| *v as *const f64).collect::<Vec<_>>();
-    ///
-    /// let result = compiled.eval_ptrs(&vars).unwrap();
-    ///
-    /// assert_eq!(result, 12.0);
-    ///
-    /// map.entry(1).and_modify(|v| **v = 4f64);
-    ///
-    /// let result = compiled.eval_ptrs(&vars).unwrap();
-    ///
-    /// assert_eq!(result, 14.0);
-    /// # Ok(()) }
-    /// ```
-    ///
-    /// See also: [`eval`](#method.eval), [`vars`](#method.vars).
+    /// # Safety
+    /// The caller must ensure that each pointer in `ptrs` is valid, aligned, and points to
+    /// memory that outlives the duration of this call. Misuse can lead to undefined behavior.
     pub fn eval_ptrs(&self, ptrs: &[*const f64]) -> Result<f64, JitError> {
         let needed = self.ordered_vars.len();
         self.check_gen(ptrs, needed)?;
