@@ -91,12 +91,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Operators
 
-| Category      | Operators                               | Description                                                              |
-|---------------|-----------------------------------------|--------------------------------------------------------------------------|
-| **Arithmetic**| `+`, `-`, `*`, `/`                      | Addition, Subtraction, Multiplication, Division.                         |
-| **Comparison**| `==`, `!=`, `>`, `>=`, `<`, `<=`          | Equal, Not Equal, Greater Than, Greater/Equal, Less Than, Less/Equal.    |
-| **Logical**   | `&&` (and), `||` (or)                   | Evaluates logical AND and OR. Both operators are short-circuiting.       |
-| **Unary**     | `-`                                     | Negates a value (e.g., `-x`).                                            |
+| Category      | Operators                        | Description                                                         |
+|---------------|----------------------------------|---------------------------------------------------------------------|
+| **Arithmetic**| `+`, `-`, `*`, `/`               | Addition, Subtraction, Multiplication, Division.                    |
+| **Comparison**| `==`, `!=`, `>`, `>=`, `<`, `<=` | Equal, Not Equal, Greater Than, Greater/Equal, Less Than, Less/Equal. |
+| **Logical**   | `&&` (and), `\|\|` (or)          | Evaluates logical AND and OR. Both operators are short-circuiting.       |
+| **Unary**     | `-`                              | Negates a value (e.g., `-x`).                                       |
 
 ### Built-in Functions & Constructs
 
