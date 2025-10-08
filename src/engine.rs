@@ -170,7 +170,7 @@ where
     /// ```
     /// use tabulon::Tabula;
     ///
-    /// fn my_pow(base: f64, exp: f64) -> f64 {
+    /// extern "C" fn my_pow(base: f64, exp: f64) -> f64 {
     ///     base.powf(exp)
     /// }
     ///
@@ -250,10 +250,12 @@ where
 
     fn ensure_module_and_register(&mut self) -> Result<(), JitError> {
         if self.module.is_none() {
-            // Build ISA with opt_level = speed
+            // Build ISA with opt_level = speed_and_size. This enables full optimization for the
+            // generated code, which can be significantly faster than the default "speed" setting.
+            // The trade-off is a slightly longer compile time.
             let mut flag_builder = settings::builder();
             flag_builder
-                .set("opt_level", "speed")
+                .set("opt_level", "speed_and_size")
                 .map_err(|e| JitError::Internal(format!("settings error: {}", e)))?;
             let isa_builder = native::builder().map_err(|e| JitError::Internal(e.to_string()))?;
             let isa = isa_builder
