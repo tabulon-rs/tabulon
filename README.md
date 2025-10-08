@@ -41,8 +41,8 @@ Use the engine to compile and evaluate an expression:
       let power_level = 9001.0;
       let is_angry_val = 1.0; // Use 1.0 for true, 0.0 for false
 
-      // `eval` takes a slice of pointers to your f64 variables
-      let result = expr.eval(&[&power_level, &is_angry_val])?;
+      // `eval` takes a slice of your f64 variables
+      let result = expr.eval(&[power_level, is_angry_val])?;
 
       // The expression "(9001 > 9000) && (1.0 * 10)" is true, so the result is 1.0.
       assert_eq!(result, 1.0);
@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let player_score = 120.0;
     let high_score = 150.0;
 
-    let result = expr.eval(&[&player_score, &high_score])?;
+    let result = expr.eval(&[player_score, high_score])?;
 
     assert_eq!(result, 165.0);
     println!("Potential new high score: {}", result);
@@ -119,18 +119,18 @@ let mut engine = Tabula::new();
 // Using the `if` function
 let expr_if = engine.compile("if(health > 50, 100, 20)").unwrap();
 let health = 75.0;
-assert_eq!(expr_if.eval(&[&health]).unwrap(), 100.0);
+assert_eq!(expr_if.eval(&[health]).unwrap(), 100.0);
 
 // Using `ifs` for multiple conditions
 let expr_ifs = engine.compile("ifs(score > 90, 1, score > 50, 0.5, 0)").unwrap();
 let score = 70.0;
-assert_eq!(expr_ifs.eval(&[&score]).unwrap(), 0.5);
+assert_eq!(expr_ifs.eval(&[score]).unwrap(), 0.5);
 
 // Using `min` and `max`
 let expr_minmax = engine.compile("min(max(a, b), 100)").unwrap();
 let a = 50.0;
 let b = 120.0;
-assert_eq!(expr_minmax.eval(&[&a, &b]).unwrap(), 100.0);
+assert_eq!(expr_minmax.eval(&[a, b]).unwrap(), 100.0);
 ```
 
 ## Performance
