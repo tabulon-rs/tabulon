@@ -74,6 +74,7 @@ fn ast_needs_bool_consts(ast: &Ast) -> bool {
     match ast {
         Num(_) | Var(_) => false,
         Neg(x) => ast_needs_bool_consts(x),
+        Not(_) => true,
         Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Max(a, b) | Min(a, b) => {
             ast_needs_bool_consts(a) || ast_needs_bool_consts(b)
         }

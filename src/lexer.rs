@@ -10,6 +10,7 @@ pub(crate) enum Token {
     Slash,
     EqEq,
     NotEq,
+    Not,
     Lt,
     Le,
     Gt,
@@ -99,7 +100,7 @@ impl<'a> Lexer<'a> {
                     self.bump();
                     Ok(Token::NotEq)
                 } else {
-                    Err(JitError::Parse("expected '=' after '!' for '!='".into()))
+                    Ok(Token::Not)
                 }
             }
             b'<' => {

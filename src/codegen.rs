@@ -64,6 +64,15 @@ pub(crate) fn codegen_expr<'a>(
             )?;
             Ok(builder.ins().fneg(v))
         }
+        Ast::Not(x) => {
+            let v = codegen_expr(
+                module, registry, builder, var_index, var_vals, x, f64_ty, consts,
+            )?;
+            let zero = consts.zero(builder);
+            let is_zero = builder.ins().fcmp(FloatCC::Equal, v, zero);
+            let one = consts.one(builder);
+            Ok(builder.ins().select(is_zero, one, zero))
+        }
         Ast::Add(a, b) => {
             let va = codegen_expr(
                 module, registry, builder, var_index, var_vals, a, f64_ty, consts,

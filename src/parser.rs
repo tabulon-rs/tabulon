@@ -141,6 +141,10 @@ impl<'a> Parser<'a> {
                 self.bump()?;
                 Ok(Ast::Neg(Box::new(self.unary()?)))
             }
+            Token::Not => {
+                self.bump()?;
+                Ok(Ast::Not(Box::new(self.unary()?)))
+            }
             _ => self.primary(),
         }
     }

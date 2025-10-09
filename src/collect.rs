@@ -11,7 +11,7 @@ pub(crate) fn collect_vars(ast: &Ast) -> Vec<String> {
                     out.push(name.clone());
                 }
             }
-            Ast::Neg(a) => walk(a, seen, out),
+            Ast::Neg(a) | Ast::Not(a) => walk(a, seen, out),
             Ast::Add(a, b)
             | Ast::Sub(a, b)
             | Ast::Mul(a, b)

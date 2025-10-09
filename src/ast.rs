@@ -9,6 +9,8 @@ pub(crate) enum Ast {
     Var(String),
     /// 단항 음수 (예: -x)
     Neg(Box<Ast>),
+    /// 논리 부정 (예: !x)
+    Not(Box<Ast>),
     /// 덧셈 (a + b)
     Add(Box<Ast>, Box<Ast>),
     /// 뺄셈 (a - b)

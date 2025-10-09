@@ -28,6 +28,13 @@ fn fold(ast: Ast) -> Ast {
                 other => Ast::Neg(Box::new(other)),
             }
         }
+        Ast::Not(x) => {
+            let x = fold(*x);
+            match x {
+                Ast::Num(v) => Ast::Num((v == 0.0) as i32 as f64),
+                other => Ast::Not(Box::new(other)),
+            }
+        }
         Ast::Add(a, b) => fold_add(*a, *b),
         Ast::Sub(a, b) => {
             // normalize to Add(a, Neg(b)) then fold

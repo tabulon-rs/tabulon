@@ -227,6 +227,7 @@ fn benchmark_eval(c: &mut Criterion) {
                 .iter()
                 .map(|key| *vars.get(key).unwrap_or(&DEFAULT_F64))
                 .collect();
+
             b.iter(|| {
                 let _ = black_box(compiled.eval(&ordered_values));
             });
@@ -239,15 +240,14 @@ fn benchmark_eval(c: &mut Criterion) {
             let compiled = eng.compile_ref(expr_str).unwrap();
             let vars = create_u64_box_map();
             let box_default = Box::new(DEFAULT_F64);
-            let ordered_ptrs: Vec<usize> = compiled
+            let ordered_ptrs = compiled
                 .vars()
                 .iter()
-                .map(|key| vars.get(key).unwrap_or(&box_default).as_ref() as *const f64 as usize)
-                .collect();
+                .map(|key| vars.get(key).unwrap_or(&box_default).as_ref() as *const f64)
+                .collect::<Vec<*const f64>>();
 
-            let cached_values = ordered_ptrs.iter().map(|v| *v as *const f64).collect::<Vec<_>>();
             b.iter(|| {
-                let _ = black_box(compiled.eval_ptrs(&cached_values));
+                let _ = black_box(compiled.eval_ptrs(&ordered_ptrs));
             });
         });
     }
