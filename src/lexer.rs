@@ -186,11 +186,11 @@ impl<'a> Lexer<'a> {
             }
         }
         let end = self.i;
-        // Custom suffix: uppercase 'M' means multiply by 10,000 (Korean '만' unit).
+        // Custom suffix: uppercase 'M' means multiply by 1,000,000 (million).
         let mut multiplier = 1.0;
         if self.peek() == Some(b'M') {
             self.bump();
-            multiplier = 10_000.0;
+            multiplier = 1_000_000.0;
         }
         let s = std::str::from_utf8(&self.src[start..end]).unwrap();
         let v: f64 = s

@@ -876,7 +876,7 @@ dependencies = [
  "log",
  "rand",
  "shipyard",
- "tabulon_macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tabulon_macros",
  "thiserror",
  "uuid",
 ]
@@ -884,16 +884,6 @@ dependencies = [
 [[package]]
 name = "tabulon_macros"
 version = "0.1.0"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
-name = "tabulon_macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1db585bd4db2b73250cb4d59b6a918a1b3a9b9c2b4cdebf0e0bd29a9ed279f3"
 dependencies = [
  "quote",
  "syn",

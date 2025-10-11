@@ -1,24 +1,24 @@
 use tabulon::Tabula;
 
 #[test]
-fn parses_m_suffix_as_ten_thousand() {
+fn parses_m_suffix_as_million() {
     let mut eng = Tabula::new();
     let e = eng.compile_ref("1M").unwrap();
-    assert_eq!(e.eval(&[]).unwrap(), 10_000.0);
+    assert_eq!(e.eval(&[]).unwrap(), 1_000_000.0);
 }
 
 #[test]
 fn parses_fractional_m_suffix() {
     let mut eng = Tabula::new();
     let e = eng.compile_ref("0.5M").unwrap();
-    assert_eq!(e.eval(&[]).unwrap(), 5_000.0);
+    assert_eq!(e.eval(&[]).unwrap(), 500_000.0);
 }
 
 #[test]
 fn parses_negative_m_suffix() {
     let mut eng = Tabula::new();
     let e = eng.compile_ref("-1M").unwrap();
-    assert_eq!(e.eval(&[]).unwrap(), -10_000.0);
+    assert_eq!(e.eval(&[]).unwrap(), -1_000_000.0);
 }
 
 #[test]

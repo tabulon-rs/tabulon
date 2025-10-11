@@ -24,6 +24,11 @@ pub extern "C" fn tabulon_pow_f64(base: f64, exp: f64) -> f64 {
     base.powf(exp)
 }
 
+#[allow(unused_variables)]
+pub extern "C" fn tabulon_pow_f64_ctx(_ctx: *mut std::ffi::c_void, base: f64, exp: f64) -> f64 {
+    tabulon_pow_f64(base, exp)
+}
+
 /// The main JIT compilation and evaluation engine.
 ///
 /// `Tabula` is the entry point for parsing, compiling, and evaluating expressions.
@@ -175,7 +180,7 @@ where
     /// ```
     /// use tabulon::Tabula;
     ///
-    /// extern "C" fn my_pow(base: f64, exp: f64) -> f64 {
+    /// extern "C" fn my_pow(_ctx: *mut std::ffi::c_void, base: f64, exp: f64) -> f64 {
     ///     base.powf(exp)
     /// }
     ///
@@ -268,8 +273,8 @@ where
                 .map_err(|e| JitError::Internal(e.to_string()))?;
 
             let mut jb = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
-            // Register built-in pow helper
-            jb.symbol("tabulon_pow_f64", tabulon_pow_f64 as *const u8);
+            // Register built-in pow helper (ctx-ignoring trampoline)
+            jb.symbol("tabulon_pow_f64_ctx", tabulon_pow_f64_ctx as *const u8);
             // Register all known functions as symbols once
             for ((name, arity), func) in &self.funcs {
                 let sym = format!("{}#{}", name, arity);
@@ -296,10 +301,11 @@ where
         self.ensure_module_and_register()?;
         let module = self.module.as_mut().unwrap();
 
-        // Common signature: one pointer param, one f64 return
+        // Common signature: args pointer and ctx pointer params, one f64 return
         let mut sig = module.make_signature();
         let ptr_ty = module.target_config().pointer_type();
-        sig.params.push(AbiParam::new(ptr_ty));
+        sig.params.push(AbiParam::new(ptr_ty)); // args ptr
+        sig.params.push(AbiParam::new(ptr_ty)); // ctx ptr
         sig.returns.push(AbiParam::new(types::F64));
         let func_name = format!("expr_{}", Uuid::new_v4());
         let func_id = module
@@ -317,6 +323,7 @@ where
             builder.seal_block(block);
 
             let vars_ptr = builder.block_params(block)[0];
+            let ctx_param = builder.block_params(block)[1];
 
             // Eagerly preload all variable values into SSA registers
             let mut mf = MemFlags::new();
@@ -359,6 +366,7 @@ where
                 &mut builder,
                 var_index,
                 &var_vals,
+                ctx_param,
                 ast,
                 types::F64,
                 &mut consts,
@@ -496,7 +504,31 @@ impl<K> CompiledExpr<K> {
         let needed = self.ordered_vars.len();
         self.check_gen(values, needed)?;
         let f = self.func_ptr;
-        let out = unsafe { f(values.as_ptr()) };
+        let out = unsafe { f(values.as_ptr(), std::ptr::null_mut()) };
+        Ok(out)
+    }
+
+    /// Evaluates the compiled expression with the given values and a context reference.
+    ///
+    /// The context reference will be converted internally to a raw pointer and passed
+    /// to all custom functions as the first argument.
+    pub fn eval_with_ctx<Ctx>(&self, values: &[f64], ctx: &Ctx) -> Result<f64, JitError> {
+        let needed = self.ordered_vars.len();
+        self.check_gen(values, needed)?;
+        let f = self.func_ptr;
+        let ctx_ptr = (ctx as *const Ctx) as crate::rt_types::CtxPtr;
+        let out = unsafe { f(values.as_ptr(), ctx_ptr) };
+        Ok(out)
+    }
+
+    /// Evaluates the compiled expression with the given values and an explicit context pointer.
+    ///
+    /// The context pointer is passed to all custom functions as the first argument.
+    pub fn eval_with_ctx_ptr(&self, values: &[f64], ctx: crate::rt_types::CtxPtr) -> Result<f64, JitError> {
+        let needed = self.ordered_vars.len();
+        self.check_gen(values, needed)?;
+        let f = self.func_ptr;
+        let out = unsafe { f(values.as_ptr(), ctx) };
         Ok(out)
     }
 }
@@ -557,7 +589,26 @@ impl<K> CompiledExprRef<K> {
         let needed = self.ordered_vars.len();
         self.check_gen(values, needed)?;
         let f = self.func_ptr;
-        let out = unsafe { f(values.as_ptr() as *const *const f64) };
+        let out = unsafe { f(values.as_ptr() as *const *const f64, std::ptr::null_mut()) };
+        Ok(out)
+    }
+
+    /// Evaluates with a context reference, which is internally converted to a raw pointer.
+    pub fn eval_with_ctx<Ctx>(&self, values: &[&f64], ctx: &Ctx) -> Result<f64, JitError> {
+        let needed = self.ordered_vars.len();
+        self.check_gen(values, needed)?;
+        let f = self.func_ptr;
+        let ctx_ptr = (ctx as *const Ctx) as crate::rt_types::CtxPtr;
+        let out = unsafe { f(values.as_ptr() as *const *const f64, ctx_ptr) };
+        Ok(out)
+    }
+
+    /// Evaluates with an explicit context pointer.
+    pub fn eval_with_ctx_ptr(&self, values: &[&f64], ctx: crate::rt_types::CtxPtr) -> Result<f64, JitError> {
+        let needed = self.ordered_vars.len();
+        self.check_gen(values, needed)?;
+        let f = self.func_ptr;
+        let out = unsafe { f(values.as_ptr() as *const *const f64, ctx) };
         Ok(out)
     }
 
@@ -573,7 +624,7 @@ impl<K> CompiledExprRef<K> {
         let needed = self.ordered_vars.len();
         self.check_gen(ptrs, needed)?;
         let f = self.func_ptr;
-        let out = unsafe { f(ptrs.as_ptr()) };
+        let out = unsafe { f(ptrs.as_ptr(), std::ptr::null_mut()) };
         Ok(out)
     }
 }
