@@ -109,6 +109,26 @@ pub(crate) fn codegen_expr<'a>(
             )?;
             Ok(builder.ins().fdiv(va, vb))
         }
+        Ast::Pow(a, b) => {
+            let va = codegen_expr(
+                module, registry, builder, var_index, var_vals, a, f64_ty, consts,
+            )?;
+            let vb = codegen_expr(
+                module, registry, builder, var_index, var_vals, b, f64_ty, consts,
+            )?;
+            // Declare external pow helper symbol and call it: extern "C" fn tabulon_pow_f64(f64, f64) -> f64
+            let mut ext_sig = module.make_signature();
+            ext_sig.params.push(AbiParam::new(types::F64));
+            ext_sig.params.push(AbiParam::new(types::F64));
+            ext_sig.returns.push(AbiParam::new(types::F64));
+            let callee_id = module
+                .declare_function("tabulon_pow_f64", Linkage::Import, &ext_sig)
+                .map_err(|e| JitError::Internal(e.to_string()))?;
+            let callee_ref = module.declare_func_in_func(callee_id, builder.func);
+            let call = builder.ins().call(callee_ref, &[va, vb]);
+            let results = builder.inst_results(call);
+            Ok(results[0])
+        }
         Ast::Eq(a, b) => {
             let va = codegen_expr(
                 module, registry, builder, var_index, var_vals, a, f64_ty, consts,

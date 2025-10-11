@@ -52,6 +52,16 @@ fn fold(ast: Ast) -> Ast {
                 (x, y) => Ast::Div(Box::new(x), Box::new(y)),
             }
         }
+        Ast::Pow(a, b) => {
+            let a = fold(*a);
+            let b = fold(*b);
+            match (a, b) {
+                (Ast::Num(x), Ast::Num(y)) => Ast::Num(x.powf(y)),
+                (x, Ast::Num(1.0)) => x,
+                (Ast::Num(1.0), _) => Ast::Num(1.0),
+                (x, y) => Ast::Pow(Box::new(x), Box::new(y)),
+            }
+        }
         Ast::Eq(a, b) => cmp_fold(
             *a,
             *b,

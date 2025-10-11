@@ -20,6 +20,10 @@ use std::sync::{
 };
 use uuid::Uuid;
 
+pub extern "C" fn tabulon_pow_f64(base: f64, exp: f64) -> f64 {
+    base.powf(exp)
+}
+
 /// The main JIT compilation and evaluation engine.
 ///
 /// `Tabula` is the entry point for parsing, compiling, and evaluating expressions.
@@ -75,7 +79,7 @@ fn ast_needs_bool_consts(ast: &Ast) -> bool {
         Num(_) | Var(_) => false,
         Neg(x) => ast_needs_bool_consts(x),
         Not(_) => true,
-        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Max(a, b) | Min(a, b) => {
+        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) | Max(a, b) | Min(a, b) => {
             ast_needs_bool_consts(a) || ast_needs_bool_consts(b)
         }
         Eq(_, _) | Ne(_, _) | Lt(_, _) | Le(_, _) | Gt(_, _) | Ge(_, _) | And(_, _) | Or(_, _) => {
@@ -264,6 +268,8 @@ where
                 .map_err(|e| JitError::Internal(e.to_string()))?;
 
             let mut jb = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+            // Register built-in pow helper
+            jb.symbol("tabulon_pow_f64", tabulon_pow_f64 as *const u8);
             // Register all known functions as symbols once
             for ((name, arity), func) in &self.funcs {
                 let sym = format!("{}#{}", name, arity);
@@ -465,6 +471,7 @@ where
 ///
 /// Created by [`Tabula::compile`].
 /// Evaluation requires passing a slice of `f64` values.
+#[derive(Debug, Clone)]
 pub struct CompiledExpr<K = String> {
     pub(crate) func_ptr: JitFn,
     pub(crate) ordered_vars: Vec<K>,
@@ -509,7 +516,7 @@ impl<K> GenToken for CompiledExpr<K> {
 /// Created by [`Tabula::compile_ref`].
 /// This version is optimized for evaluation methods that use pointers (`eval` and `eval_ptrs`),
 /// which can be slightly more efficient if the underlying data is not contiguous.
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub struct CompiledExprRef<K = String> {
     pub(crate) func_ptr: JitFnRef,
     pub(crate) ordered_vars: Vec<K>,

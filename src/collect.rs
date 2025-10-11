@@ -16,6 +16,7 @@ pub(crate) fn collect_vars(ast: &Ast) -> Vec<String> {
             | Ast::Sub(a, b)
             | Ast::Mul(a, b)
             | Ast::Div(a, b)
+            | Ast::Pow(a, b)
             | Ast::Eq(a, b)
             | Ast::Ne(a, b)
             | Ast::Lt(a, b)

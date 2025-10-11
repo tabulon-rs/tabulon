@@ -19,6 +19,8 @@ pub(crate) enum Ast {
     Mul(Box<Ast>, Box<Ast>),
     /// 나눗셈 (a / b)
     Div(Box<Ast>, Box<Ast>),
+    /// 거듭제곱 (a ^ b)
+    Pow(Box<Ast>, Box<Ast>),
     /// 동등 비교 (a == b)
     Eq(Box<Ast>, Box<Ast>),
     /// 비동등 비교 (a != b)

@@ -145,7 +145,17 @@ impl<'a> Parser<'a> {
                 self.bump()?;
                 Ok(Ast::Not(Box::new(self.unary()?)))
             }
-            _ => self.primary(),
+            _ => self.power(),
+        }
+    }
+    fn power(&mut self) -> Result<Ast, JitError> {
+        let base = self.primary()?;
+        if matches!(self.look, Token::Caret) {
+            self.bump()?;
+            let rhs = self.power()?; // right-associative
+            Ok(Ast::Pow(Box::new(base), Box::new(rhs)))
+        } else {
+            Ok(base)
         }
     }
     fn primary(&mut self) -> Result<Ast, JitError> {

@@ -8,6 +8,7 @@ pub(crate) enum Token {
     Minus,
     Star,
     Slash,
+    Caret,
     EqEq,
     NotEq,
     Not,
@@ -85,6 +86,10 @@ impl<'a> Lexer<'a> {
                 self.bump();
                 Ok(Token::Slash)
             }
+            b'^' => {
+                self.bump();
+                Ok(Token::Caret)
+            }
             b'=' => {
                 self.bump();
                 if self.peek() == Some(b'=') {
@@ -150,21 +155,48 @@ impl<'a> Lexer<'a> {
     fn lex_number(&mut self) -> Result<Token, JitError> {
         let start = self.i;
         let mut seen_dot = false;
+        let mut seen_exp = false;
+        // Parse mantissa (integer and fractional) and optional scientific exponent.
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() {
                 self.i += 1;
-            } else if c == b'.' && !seen_dot {
+            } else if c == b'.' && !seen_dot && !seen_exp {
                 seen_dot = true;
                 self.i += 1;
+            } else if (c == b'e' || c == b'E') && !seen_exp {
+                // Scientific notation exponent part
+                seen_exp = true;
+                self.i += 1; // consume 'e' or 'E'
+                // Optional sign after exponent
+                if let Some(sign) = self.peek() {
+                    if sign == b'+' || sign == b'-' {
+                        self.i += 1;
+                    }
+                }
+                // Consume exponent digits (if any). If none, parse() will error later.
+                while let Some(d) = self.peek() {
+                    if d.is_ascii_digit() {
+                        self.i += 1;
+                    } else {
+                        break;
+                    }
+                }
             } else {
                 break;
             }
         }
-        let s = std::str::from_utf8(&self.src[start..self.i]).unwrap();
+        let end = self.i;
+        // Custom suffix: uppercase 'M' means multiply by 10,000 (Korean '만' unit).
+        let mut multiplier = 1.0;
+        if self.peek() == Some(b'M') {
+            self.bump();
+            multiplier = 10_000.0;
+        }
+        let s = std::str::from_utf8(&self.src[start..end]).unwrap();
         let v: f64 = s
             .parse()
             .map_err(|e| JitError::Parse(format!("invalid number '{}': {}", s, e)))?;
-        Ok(Token::Num(v))
+        Ok(Token::Num(v * multiplier))
     }
     fn lex_ident(&mut self) -> Result<Token, JitError> {
         let start = self.i;
