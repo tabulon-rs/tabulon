@@ -47,28 +47,48 @@ pub extern "C" fn tabulon_pow_f64_ctx(_ctx: *mut std::ffi::c_void, base: f64, ex
 /// let result = expr.eval(&[10.0, 20.0]).unwrap();
 /// assert_eq!(result, 30.0);
 /// ```
-pub struct Tabula<K = String, R = IdentityResolver> {
+pub struct Tabula<K = String, R = IdentityResolver, Ctx = ()> {
     pub(crate) resolver: R,
-    pub(crate) _phantom: std::marker::PhantomData<K>,
+    pub(crate) _phantom_k: std::marker::PhantomData<K>,
+    pub(crate) _phantom_ctx: std::marker::PhantomData<Ctx>,
     pub(crate) funcs: HashMap<(String, u8), RegisteredFn>,
     pub(crate) module: Option<JITModule>,
     pub(crate) generation: Arc<AtomicUsize>,
 }
 
-impl Default for Tabula<String, IdentityResolver> {
+impl Default for Tabula<String, IdentityResolver, ()> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Tabula<String, IdentityResolver> {
+impl Tabula<String, IdentityResolver, ()> {
     /// Creates a new `Tabula` engine with the default configuration.
     ///
     /// The default engine uses `String` keys for variables and resolves them to themselves.
     pub fn new() -> Self {
         Self {
             resolver: IdentityResolver,
-            _phantom: std::marker::PhantomData,
+            _phantom_k: std::marker::PhantomData,
+            _phantom_ctx: std::marker::PhantomData,
+            funcs: HashMap::new(),
+            module: None,
+            generation: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl<K, R> Tabula<K, R, ()>
+where
+    K: Clone + Eq + std::hash::Hash + Send + Sync + 'static,
+    R: VarResolver<K>,
+{
+    /// Creates a new `Tabula` engine with a custom variable resolver.
+    pub fn with_resolver(resolver: R) -> Self {
+        Self {
+            resolver,
+            _phantom_k: std::marker::PhantomData,
+            _phantom_ctx: std::marker::PhantomData,
             funcs: HashMap::new(),
             module: None,
             generation: Arc::new(AtomicUsize::new(0)),
@@ -96,51 +116,54 @@ fn ast_needs_bool_consts(ast: &Ast) -> bool {
     }
 }
 
-impl<K, R> Tabula<K, R>
+fn ast_uses_ctx(ast: &Ast, funcs: &HashMap<(String, u8), RegisteredFn>) -> bool {
+    use crate::ast::Ast::*;
+    match ast {
+        Num(_) | Var(_) => false,
+        Neg(x) | Not(x) => ast_uses_ctx(x, funcs),
+        Add(a, b)
+        | Sub(a, b)
+        | Mul(a, b)
+        | Div(a, b)
+        | Pow(a, b)
+        | Max(a, b)
+        | Min(a, b)
+        | Eq(a, b)
+        | Ne(a, b)
+        | Lt(a, b)
+        | Le(a, b)
+        | Gt(a, b)
+        | Ge(a, b)
+        | And(a, b)
+        | Or(a, b) => ast_uses_ctx(a, funcs) || ast_uses_ctx(b, funcs),
+        If(c, t, e) => ast_uses_ctx(c, funcs) || ast_uses_ctx(t, funcs) || ast_uses_ctx(e, funcs),
+        Ifs(list) => list.iter().any(|sub| ast_uses_ctx(sub, funcs)),
+        Call { name, args } => {
+            let arity = args.len() as u8;
+            let this_uses = funcs
+                .get(&(name.clone(), arity))
+                .map(|rf| match rf {
+                    RegisteredFn::Nullary { uses_ctx, .. }
+                    | RegisteredFn::Unary { uses_ctx, .. }
+                    | RegisteredFn::Binary { uses_ctx, .. }
+                    | RegisteredFn::Ternary { uses_ctx, .. } => *uses_ctx,
+                })
+                .unwrap_or(false);
+            this_uses || args.iter().any(|a| ast_uses_ctx(a, funcs))
+        }
+    }
+}
+
+impl<K, R, Ctx> Tabula<K, R, Ctx>
 where
     K: Clone + Eq + std::hash::Hash + Send + Sync + 'static,
     R: VarResolver<K>,
 {
-    /// Creates a new `Tabula` engine with a custom variable resolver.
-    ///
-    /// This allows you to define custom logic for mapping variable names from expression strings
-    /// to a key type `K` of your choice (e.g., a u64, an enum, etc.).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use tabulon::{Tabula, VarResolver, VarResolveError};
-    ///
-    /// // A resolver that maps "strength" to key 1 and "dexterity" to key 2.
-    /// struct MyResolver;
-    /// impl VarResolver<u32> for MyResolver {
-    ///     fn resolve(&self, ident: &str) -> Result<u32, VarResolveError> {
-    ///         match ident {
-    ///             "strength" => Ok(1),
-    ///             "dexterity" => Ok(2),
-    ///             _ => Err(VarResolveError::Unknown(ident.to_string())),
-    ///         }
-    ///     }
-    /// }
-    ///
-    /// let mut engine = Tabula::with_resolver(MyResolver);
-    /// let expr = engine.compile("strength * 2").unwrap();
-    /// assert_eq!(expr.vars(), &[1]);
-    /// ```
-    pub fn with_resolver(resolver: R) -> Self {
-        Self {
-            resolver,
-            _phantom: std::marker::PhantomData,
-            funcs: HashMap::new(),
-            module: None,
-            generation: Arc::new(AtomicUsize::new(0)),
-        }
-    }
 
     /// Registers a nullary (0-argument) function with the engine.
     ///
     /// Functions must be registered before any expressions are compiled.
-    pub fn register_nullary(&mut self, name: &str, f: Fn0) -> Result<(), JitError> {
+    pub fn register_nullary(&mut self, name: &str, f: Fn0, uses_ctx: bool) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
                 "cannot register functions after JIT module is created; create a new Engine".into(),
@@ -153,11 +176,11 @@ where
                 arity: 0,
             });
         }
-        self.funcs.insert(key, RegisteredFn::Nullary(f));
+        self.funcs.insert(key, RegisteredFn::Nullary { f, uses_ctx });
         Ok(())
     }
     /// Registers a unary (1-argument) function with the engine.
-    pub fn register_unary(&mut self, name: &str, f: Fn1) -> Result<(), JitError> {
+    pub fn register_unary(&mut self, name: &str, f: Fn1, uses_ctx: bool) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
                 "cannot register functions after JIT module is created; create a new Engine".into(),
@@ -170,7 +193,7 @@ where
                 arity: 1,
             });
         }
-        self.funcs.insert(key, RegisteredFn::Unary(f));
+        self.funcs.insert(key, RegisteredFn::Unary { f, uses_ctx });
         Ok(())
     }
     /// Registers a binary (2-argument) function with the engine.
@@ -186,13 +209,13 @@ where
     ///
     /// let mut engine = Tabula::new();
     /// // The function must be registered before compiling any expressions.
-    /// engine.register_binary("my_pow", my_pow).unwrap();
+    /// engine.register_binary("my_pow", my_pow, false).unwrap();
     ///
     /// let expr = engine.compile("my_pow(a, 3)").unwrap();
     /// let result = expr.eval(&[2.0]).unwrap();
     /// assert_eq!(result, 8.0);
     /// ```
-    pub fn register_binary(&mut self, name: &str, f: Fn2) -> Result<(), JitError> {
+    pub fn register_binary(&mut self, name: &str, f: Fn2, uses_ctx: bool) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
                 "cannot register functions after JIT module is created; create a new Engine".into(),
@@ -205,11 +228,11 @@ where
                 arity: 2,
             });
         }
-        self.funcs.insert(key, RegisteredFn::Binary(f));
+        self.funcs.insert(key, RegisteredFn::Binary { f, uses_ctx });
         Ok(())
     }
     /// Registers a ternary (3-argument) function with the engine.
-    pub fn register_ternary(&mut self, name: &str, f: Fn3) -> Result<(), JitError> {
+    pub fn register_ternary(&mut self, name: &str, f: Fn3, uses_ctx: bool) -> Result<(), JitError> {
         if self.module.is_some() {
             return Err(JitError::Internal(
                 "cannot register functions after JIT module is created; create a new Engine".into(),
@@ -222,7 +245,52 @@ where
                 arity: 3,
             });
         }
-        self.funcs.insert(key, RegisteredFn::Ternary(f));
+        self.funcs.insert(key, RegisteredFn::Ternary { f, uses_ctx });
+        Ok(())
+    }
+
+    /// Registers a function using its #[function]-generated marker type with compile-time
+    /// context checking. This method is generic over the engine's Ctx type and only compiles
+    /// when the function's context (if any) matches the engine's Ctx.
+    pub fn register_typed<F>(&mut self) -> Result<(), JitError>
+    where
+        F: crate::registry::FunctionForEngineCtx<Ctx>,
+    {
+        if self.module.is_some() {
+            return Err(JitError::Internal(
+                "cannot register functions after JIT module is created; create a new Engine".into(),
+            ));
+        }
+        let key = (F::NAME.to_string(), F::ARITY);
+        if self.funcs.contains_key(&key) {
+            return Err(JitError::FunctionExists {
+                name: F::NAME.to_string(),
+                arity: F::ARITY,
+            });
+        }
+        unsafe {
+            match F::ARITY {
+                0 => {
+                    let f: Fn0 = std::mem::transmute::<*const u8, Fn0>(F::addr());
+                    self.funcs.insert(key, RegisteredFn::Nullary { f, uses_ctx: F::USES_CTX });
+                }
+                1 => {
+                    let f: Fn1 = std::mem::transmute::<*const u8, Fn1>(F::addr());
+                    self.funcs.insert(key, RegisteredFn::Unary { f, uses_ctx: F::USES_CTX });
+                }
+                2 => {
+                    let f: Fn2 = std::mem::transmute::<*const u8, Fn2>(F::addr());
+                    self.funcs.insert(key, RegisteredFn::Binary { f, uses_ctx: F::USES_CTX });
+                }
+                3 => {
+                    let f: Fn3 = std::mem::transmute::<*const u8, Fn3>(F::addr());
+                    self.funcs.insert(key, RegisteredFn::Ternary { f, uses_ctx: F::USES_CTX });
+                }
+                n => {
+                    return Err(JitError::Internal(format!("unsupported arity {} for {}", n, F::NAME)));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -279,10 +347,10 @@ where
             for ((name, arity), func) in &self.funcs {
                 let sym = format!("{}#{}", name, arity);
                 let addr: *const u8 = match func {
-                    RegisteredFn::Nullary(f) => *f as *const u8,
-                    RegisteredFn::Unary(f) => *f as *const u8,
-                    RegisteredFn::Binary(f) => *f as *const u8,
-                    RegisteredFn::Ternary(f) => *f as *const u8,
+                    RegisteredFn::Nullary { f, .. } => *f as *const u8,
+                    RegisteredFn::Unary { f, .. } => *f as *const u8,
+                    RegisteredFn::Binary { f, .. } => *f as *const u8,
+                    RegisteredFn::Ternary { f, .. } => *f as *const u8,
                 };
                 jb.symbol(sym.as_str(), addr);
             }
@@ -396,17 +464,19 @@ where
     ///
     /// # Errors
     /// Returns a `JitError` if parsing, resolution, or compilation fails.
-    pub fn compile(&mut self, expr: &str) -> Result<CompiledExpr<K>, JitError> {
+    pub fn compile(&mut self, expr: &str) -> Result<CompiledExpr<K, Ctx>, JitError> {
         let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
         let code =
             self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::DirectF64)?;
         let func_ptr: JitFn = unsafe { std::mem::transmute(code) };
         let gen_at = self.generation.load(Ordering::Relaxed);
-        Ok(CompiledExpr::<K> {
+        Ok(CompiledExpr::<K, Ctx> {
             func_ptr,
             ordered_vars,
             gen_token: self.generation.clone(),
             gen_at_compile: gen_at,
+            uses_ctx: ast_uses_ctx(&ast, &self.funcs),
+            _phantom_ctx: std::marker::PhantomData,
         })
     }
 
@@ -418,17 +488,19 @@ where
     ///
     /// # Errors
     /// Returns a `JitError` if parsing, resolution, or compilation fails.
-    pub fn compile_ref(&mut self, expr: &str) -> Result<CompiledExprRef<K>, JitError> {
+    pub fn compile_ref(&mut self, expr: &str) -> Result<CompiledExprRef<K, Ctx>, JitError> {
         let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
         let code =
             self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::IndirectPtr)?;
         let func_ptr: JitFnRef = unsafe { std::mem::transmute(code) };
         let gen_at = self.generation.load(Ordering::Relaxed);
-        Ok(CompiledExprRef::<K> {
+        Ok(CompiledExprRef::<K, Ctx> {
             func_ptr,
             ordered_vars,
             gen_token: self.generation.clone(),
             gen_at_compile: gen_at,
+            uses_ctx: ast_uses_ctx(&ast, &self.funcs),
+            _phantom_ctx: std::marker::PhantomData,
         })
     }
 
@@ -480,19 +552,38 @@ where
 /// Created by [`Tabula::compile`].
 /// Evaluation requires passing a slice of `f64` values.
 #[derive(Debug, Clone)]
-pub struct CompiledExpr<K = String> {
+pub struct CompiledExpr<K = String, Ctx = ()> {
     pub(crate) func_ptr: JitFn,
     pub(crate) ordered_vars: Vec<K>,
     pub(crate) gen_token: Arc<AtomicUsize>,
     pub(crate) gen_at_compile: usize,
+    pub(crate) uses_ctx: bool,
+    pub(crate) _phantom_ctx: std::marker::PhantomData<Ctx>,
 }
 
-impl<K> CompiledExpr<K> {
+impl<K, Ctx> CompiledExpr<K, Ctx> {
     /// Returns a slice of variable keys in the order they must be supplied for evaluation.
     pub fn vars(&self) -> &[K] {
         &self.ordered_vars
     }
 
+    /// Preferred accessor name for variable keys (alias of vars()).
+    pub fn var_names(&self) -> &[K] {
+        &self.ordered_vars
+    }
+
+    /// Returns true if any function in this expression uses the evaluation context.
+    pub fn uses_ctx(&self) -> bool {
+        self.uses_ctx
+    }
+
+    /// Alias for uses_ctx() for improved discoverability.
+    pub fn requires_ctx(&self) -> bool {
+        self.uses_ctx
+    }
+}
+
+impl<K> CompiledExpr<K, ()> {
     /// Evaluates the compiled expression with the given values.
     ///
     /// The `values` slice must provide `f64` values in the exact order specified by `vars()`.
@@ -507,33 +598,21 @@ impl<K> CompiledExpr<K> {
         let out = unsafe { f(values.as_ptr(), std::ptr::null_mut()) };
         Ok(out)
     }
+}
 
-    /// Evaluates the compiled expression with the given values and a context reference.
-    ///
-    /// The context reference will be converted internally to a raw pointer and passed
-    /// to all custom functions as the first argument.
-    pub fn eval_with_ctx<Ctx>(&self, values: &[f64], ctx: &Ctx) -> Result<f64, JitError> {
+impl<K, Ctx> CompiledExpr<K, Ctx> {
+    /// Evaluates the compiled expression with the given values and a mutable context reference.
+    pub fn eval_with_ctx(&self, values: &[f64], ctx: &mut Ctx) -> Result<f64, JitError> {
         let needed = self.ordered_vars.len();
         self.check_gen(values, needed)?;
         let f = self.func_ptr;
-        let ctx_ptr = (ctx as *const Ctx) as crate::rt_types::CtxPtr;
+        let ctx_ptr = (ctx as *mut Ctx) as crate::rt_types::CtxPtr;
         let out = unsafe { f(values.as_ptr(), ctx_ptr) };
-        Ok(out)
-    }
-
-    /// Evaluates the compiled expression with the given values and an explicit context pointer.
-    ///
-    /// The context pointer is passed to all custom functions as the first argument.
-    pub fn eval_with_ctx_ptr(&self, values: &[f64], ctx: crate::rt_types::CtxPtr) -> Result<f64, JitError> {
-        let needed = self.ordered_vars.len();
-        self.check_gen(values, needed)?;
-        let f = self.func_ptr;
-        let out = unsafe { f(values.as_ptr(), ctx) };
         Ok(out)
     }
 }
 
-impl<K> GenToken for CompiledExpr<K> {
+impl<K, Ctx> GenToken for CompiledExpr<K, Ctx> {
     fn gen_token(&self) -> usize {
         self.gen_token.load(Ordering::Relaxed)
     }
@@ -549,42 +628,41 @@ impl<K> GenToken for CompiledExpr<K> {
 /// This version is optimized for evaluation methods that use pointers (`eval` and `eval_ptrs`),
 /// which can be slightly more efficient if the underlying data is not contiguous.
 #[derive(Debug,Clone)]
-pub struct CompiledExprRef<K = String> {
+pub struct CompiledExprRef<K = String, Ctx = ()> {
     pub(crate) func_ptr: JitFnRef,
     pub(crate) ordered_vars: Vec<K>,
     pub(crate) gen_token: Arc<AtomicUsize>,
     pub(crate) gen_at_compile: usize,
+    pub(crate) uses_ctx: bool,
+    pub(crate) _phantom_ctx: std::marker::PhantomData<Ctx>,
 }
 
-impl<K> CompiledExprRef<K> {
+impl<K, Ctx> CompiledExprRef<K, Ctx> {
     /// Returns a slice of variable keys in the order they must be supplied for evaluation.
     pub fn vars(&self) -> &[K] {
         &self.ordered_vars
     }
 
+    /// Preferred accessor name for variable keys (alias of vars()).
+    pub fn var_names(&self) -> &[K] {
+        &self.ordered_vars
+    }
+
+    /// Returns true if any function in this expression uses the evaluation context.
+    pub fn uses_ctx(&self) -> bool {
+        self.uses_ctx
+    }
+
+    /// Alias for uses_ctx() for improved discoverability.
+    pub fn requires_ctx(&self) -> bool {
+        self.uses_ctx
+    }
+}
+
+impl<K> CompiledExprRef<K, ()> {
     /// Evaluates the compiled expression with the given values (as references).
     ///
     /// The `values` slice must provide `&f64` references in the exact order specified by `vars()`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use tabulon::Tabula;
-    ///
-    /// let mut engine = Tabula::new();
-    /// let expr = engine.compile_ref("a * b").unwrap();
-    ///
-    /// let a = 10.0;
-    /// let b = 5.5;
-    ///
-    /// // Pass values as a slice of references
-    /// let result = expr.eval(&[&a, &b]).unwrap();
-    /// assert_eq!(result, 55.0);
-    /// ```
-    ///
-    /// # Errors
-    /// - `JitError::ValuesLen` if `values.len()` is less than `self.vars().len()`.
-    /// - `JitError::Invalidated` if the expression was invalidated by `Tabula::free_memory`.
     pub fn eval(&self, values: &[&f64]) -> Result<f64, JitError> {
         let needed = self.ordered_vars.len();
         self.check_gen(values, needed)?;
@@ -593,33 +671,11 @@ impl<K> CompiledExprRef<K> {
         Ok(out)
     }
 
-    /// Evaluates with a context reference, which is internally converted to a raw pointer.
-    pub fn eval_with_ctx<Ctx>(&self, values: &[&f64], ctx: &Ctx) -> Result<f64, JitError> {
-        let needed = self.ordered_vars.len();
-        self.check_gen(values, needed)?;
-        let f = self.func_ptr;
-        let ctx_ptr = (ctx as *const Ctx) as crate::rt_types::CtxPtr;
-        let out = unsafe { f(values.as_ptr() as *const *const f64, ctx_ptr) };
-        Ok(out)
-    }
-
-    /// Evaluates with an explicit context pointer.
-    pub fn eval_with_ctx_ptr(&self, values: &[&f64], ctx: crate::rt_types::CtxPtr) -> Result<f64, JitError> {
-        let needed = self.ordered_vars.len();
-        self.check_gen(values, needed)?;
-        let f = self.func_ptr;
-        let out = unsafe { f(values.as_ptr() as *const *const f64, ctx) };
-        Ok(out)
-    }
-
     /// Evaluates this compiled expression using raw pointers to `f64` inputs.
-    ///
-    /// This is an advanced, unsafe API for integrations (e.g., FFI) where holding references
-    /// is not feasible. Pointers must be valid and point to live `f64` data.
     ///
     /// # Safety
     /// The caller must ensure that each pointer in `ptrs` is valid, aligned, and points to
-    /// memory that outlives the duration of this call. Misuse can lead to undefined behavior.
+    /// memory that outlives the duration of this call.
     pub fn eval_ptrs(&self, ptrs: &[*const f64]) -> Result<f64, JitError> {
         let needed = self.ordered_vars.len();
         self.check_gen(ptrs, needed)?;
@@ -629,7 +685,32 @@ impl<K> CompiledExprRef<K> {
     }
 }
 
-impl<K> GenToken for CompiledExprRef<K> {
+impl<K, Ctx> CompiledExprRef<K, Ctx> {
+    /// Evaluates with a mutable context reference, which is internally converted to a raw pointer.
+    pub fn eval_with_ctx(&self, values: &[&f64], ctx: &mut Ctx) -> Result<f64, JitError> {
+        let needed = self.ordered_vars.len();
+        self.check_gen(values, needed)?;
+        let f = self.func_ptr;
+        let ctx_ptr = (ctx as *mut Ctx) as crate::rt_types::CtxPtr;
+        let out = unsafe { f(values.as_ptr() as *const *const f64, ctx_ptr) };
+        Ok(out)
+    }
+
+    /// Evaluates this compiled expression using raw pointers to `f64` inputs and a mutable context reference.
+    ///
+    /// The `ptrs` slice must provide pointers in the exact order specified by `vars()`.
+    /// The pointers must be valid and aligned for reads of `f64` for the duration of the call.
+    pub fn eval_ptrs_with_ctx(&self, ptrs: &[*const f64], ctx: &mut Ctx) -> Result<f64, JitError> {
+        let needed = self.ordered_vars.len();
+        self.check_gen(ptrs, needed)?;
+        let f = self.func_ptr;
+        let ctx_ptr = (ctx as *mut Ctx) as crate::rt_types::CtxPtr;
+        let out = unsafe { f(ptrs.as_ptr(), ctx_ptr) };
+        Ok(out)
+    }
+}
+
+impl<K, Ctx> GenToken for CompiledExprRef<K, Ctx> {
     fn gen_token(&self) -> usize {
         self.gen_token.load(Ordering::Relaxed)
     }
@@ -671,4 +752,37 @@ trait CheckGen {
 enum LoadMode {
     DirectF64,
     IndirectPtr,
+}
+
+
+impl<Ctx> Tabula<String, IdentityResolver, Ctx> {
+    /// Creates a new `Tabula` engine with the default configuration for a specific context type.
+    pub fn new_ctx() -> Self {
+        Self {
+            resolver: IdentityResolver,
+            _phantom_k: std::marker::PhantomData,
+            _phantom_ctx: std::marker::PhantomData,
+            funcs: HashMap::new(),
+            module: None,
+            generation: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl<K, R, Ctx> Tabula<K, R, Ctx>
+where
+    K: Clone + Eq + std::hash::Hash + Send + Sync + 'static,
+    R: VarResolver<K>,
+{
+    /// Creates a new `Tabula` engine with a custom variable resolver for a specific context type.
+    pub fn with_resolver_ctx(resolver: R) -> Self {
+        Self {
+            resolver,
+            _phantom_k: std::marker::PhantomData,
+            _phantom_ctx: std::marker::PhantomData,
+            funcs: HashMap::new(),
+            module: None,
+            generation: Arc::new(AtomicUsize::new(0)),
+        }
+    }
 }

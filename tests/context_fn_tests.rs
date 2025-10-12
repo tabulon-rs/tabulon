@@ -19,28 +19,28 @@ extern "C" fn scale_add(ctx: *mut std::ffi::c_void, a: f64, b: f64) -> f64 {
 
 #[test]
 fn unary_ctx_function_eval_with_ctx_ptr() {
-    let mut eng = Tabula::new();
-    eng.register_unary("add_bias", add_bias).unwrap();
+    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    eng.register_unary("add_bias", add_bias, true).unwrap();
 
     let expr = eng.compile_ref("add_bias(A)").unwrap();
     let a = 5.0;
 
-    let ctx = Ctx { bias: 10.0 };
-    let out = expr.eval_with_ctx(&[&a], &ctx).unwrap();
+    let mut ctx = Ctx { bias: 10.0 };
+    let out = expr.eval_with_ctx(&[&a], &mut ctx).unwrap();
     assert_eq!(out, 15.0);
 }
 
 #[test]
 fn binary_ctx_function_eval_with_ctx() {
-    let mut eng = Tabula::new();
-    eng.register_binary("scale_add", scale_add).unwrap();
+    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    eng.register_binary("scale_add", scale_add, true).unwrap();
 
     // expression: scale_add(x, y) with bias=2.0 => 3 * 2 + 4 = 10
     let expr = eng.compile_ref("scale_add(X, Y)").unwrap();
     let x = 3.0;
     let y = 4.0;
 
-    let ctx = Ctx { bias: 2.0 };
-    let out = expr.eval_with_ctx(&[&x, &y], &ctx).unwrap();
+    let mut ctx = Ctx { bias: 2.0 };
+    let out = expr.eval_with_ctx(&[&x, &y], &mut ctx).unwrap();
     assert_eq!(out, 10.0);
 }

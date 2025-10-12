@@ -120,6 +120,7 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Call-site argument reconstruction in original order
     let mut call_args = Vec::with_capacity(ordered.len());
     let mut ctx_bind = None;
+    let mut ctx_ty_tokens: Option<Box<Type>> = None;
 
     let ctx_param_ident = if has_ctx { format_ident!("ctx_ptr") } else { format_ident!("_ctx") };
 
@@ -140,6 +141,7 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     quote! { let #name: &#elem_ty = unsafe { &*(#ctx_param_ident as *const #elem_ty) }; }
                 };
                 ctx_bind = Some(binding);
+                ctx_ty_tokens = Some(elem_ty.clone());
                 call_args.push(quote! { #name });
             }
         }
@@ -148,6 +150,28 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let arity_lit = arity as u8;
 
     let ctx_bind_stmt = ctx_bind.unwrap_or_else(|| quote! {});
+
+    let uses_ctx_lit = if has_ctx { quote! { true } } else { quote! { false } };
+
+    // Compute ctx TypeId for runtime verification at registration time.
+    let ctx_type_id_expr = if has_ctx {
+        let ty = ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx");
+        quote! { ::core::any::TypeId::of::<#ty>() }
+    } else {
+        quote! { ::core::any::TypeId::of::<()>() } // unused when uses_ctx=false
+    };
+
+    let ctx_id_fn_ident = format_ident!("__tabulon_ctx_of_{}", ident);
+
+    let marker_ident = format_ident!("__tabulon_marker_{}", ident);
+
+    // Conditional where-clause for compile-time context matching: only constrain when ctx is used
+    let marker_where_clause = if has_ctx {
+        let ty = ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx");
+        quote! { where EngineCtx: ::tabulon::SameAs<#ty> }
+    } else {
+        quote! {}
+    };
 
     let output = quote! {
         #func
@@ -158,8 +182,22 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
             #ident( #( #call_args ),* )
         }
 
+        #[allow(non_snake_case)]
+        fn #ctx_id_fn_ident() -> ::core::any::TypeId { #ctx_type_id_expr }
+
+        // Public marker type for optional compile-time context matching
+        #[allow(non_camel_case_types)]
+        pub struct #marker_ident;
+
+        impl<EngineCtx> ::tabulon::FunctionForEngineCtx<EngineCtx> for #marker_ident #marker_where_clause {
+            const NAME: &'static str = #name_str;
+            const ARITY: u8 = #arity_lit;
+            const USES_CTX: bool = #uses_ctx_lit;
+            fn addr() -> *const u8 { #shim_ident as *const u8 }
+        }
+
         ::tabulon::inventory::submit! {
-            ::tabulon::FnMeta { name: #name_str, arity: #arity_lit, addr: #shim_ident as *const u8, mod_path: module_path!() }
+            ::tabulon::FnMeta { name: #name_str, arity: #arity_lit, addr: #shim_ident as *const u8, mod_path: module_path!(), uses_ctx: #uses_ctx_lit, ctx_type_id_fn: if #uses_ctx_lit { Some(#ctx_id_fn_ident as fn() -> ::core::any::TypeId) } else { None } }
         }
     };
 

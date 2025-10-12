@@ -10,8 +10,8 @@ pub type Fn3 = extern "C" fn(CtxPtr, f64, f64, f64) -> f64;
 
 #[derive(Clone, Copy)]
 pub enum RegisteredFn {
-    Nullary(Fn0),
-    Unary(Fn1),
-    Binary(Fn2),
-    Ternary(Fn3),
+    Nullary { f: Fn0, uses_ctx: bool },
+    Unary { f: Fn1, uses_ctx: bool },
+    Binary { f: Fn2, uses_ctx: bool },
+    Ternary { f: Fn3, uses_ctx: bool },
 }
