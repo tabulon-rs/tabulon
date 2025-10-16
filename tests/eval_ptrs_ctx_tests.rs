@@ -12,7 +12,7 @@ extern "C" fn add_bias(ctx: *mut std::ffi::c_void, x: f64) -> f64 {
 
 #[test]
 fn eval_ptrs_with_ctx_unary() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     eng.register_unary("add_bias", add_bias, true).unwrap();
 
     let e = eng.compile_ref("add_bias(A)").unwrap();

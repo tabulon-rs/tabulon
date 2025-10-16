@@ -11,7 +11,7 @@ fn sqr(x: f64) -> f64 { x * x }
 
 #[test]
 fn register_typed_with_matching_ctx() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     // Register using the typed, compile-time-checked API via the generated marker type
     eng.register_typed::<__tabulon_marker_add_bias>().unwrap();
 

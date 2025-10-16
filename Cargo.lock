@@ -863,7 +863,7 @@ dependencies = [
 
 [[package]]
 name = "tabulon"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "cranelift",
  "cranelift-jit",

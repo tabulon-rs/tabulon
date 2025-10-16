@@ -39,7 +39,7 @@ fn identity(a: f64) -> f64 {
 
 #[test]
 fn context_read_only_param() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     register_functions!(eng, add_bias, identity).unwrap();
 
     let a = 5.0;
@@ -56,7 +56,7 @@ fn context_read_only_param() {
 
 #[test]
 fn context_param_first_position() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     register_functions!(eng, bias_add_ctx_first).unwrap();
 
     let a = 3.0;
@@ -70,7 +70,7 @@ fn context_param_first_position() {
 
 #[test]
 fn context_mut_param_modifies_state() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     register_functions!(eng, count_and_add).unwrap();
 
     let a = 1.0;
@@ -88,7 +88,7 @@ fn context_mut_param_modifies_state() {
 
 #[test]
 fn context_param_vec_state() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, VecCtx>::new_ctx();
+    let mut eng = Tabula::<VecCtx>::new_ctx();
     register_functions!(eng, get_vec_ctx).unwrap();
 
     let e = eng.compile("get_vec_ctx(A)").unwrap();
@@ -105,7 +105,7 @@ fn context_param_vec_state() {
 #[test]
 fn mismatched_context_registration_error() {
     // Engine expects Ctx, but function get_vec_ctx requires VecCtx. Should error.
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     let err = register_functions!(eng, get_vec_ctx).unwrap_err();
     match err {
         tabulon::JitError::Internal(msg) => assert!(msg.contains("context type mismatch"), "unexpected message: {}", msg),
@@ -116,19 +116,19 @@ fn mismatched_context_registration_error() {
 #[test]
 fn uses_ctx_flags() {
     // add_bias uses &Ctx
-    let mut eng1 = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng1 = Tabula::<Ctx>::new_ctx();
     register_functions!(eng1, add_bias).unwrap();
     let e1 = eng1.compile_ref("add_bias(A)").unwrap();
     assert!(e1.uses_ctx(), "expected uses_ctx() to be true for add_bias");
 
     // count_and_add uses &mut Ctx
-    let mut eng2 = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng2 = Tabula::<Ctx>::new_ctx();
     register_functions!(eng2, count_and_add).unwrap();
     let e2 = eng2.compile_ref("count_and_add(A)").unwrap();
     assert!(e2.uses_ctx(), "expected uses_ctx() to be true for count_and_add");
 
     // get_vec_ctx with VecCtx engine
-    let mut eng3 = Tabula::<String, tabulon::IdentityResolver, VecCtx>::new_ctx();
+    let mut eng3 = Tabula::<VecCtx>::new_ctx();
     register_functions!(eng3, get_vec_ctx).unwrap();
     let e3 = eng3.compile_ref("get_vec_ctx(A)").unwrap();
     assert!(e3.uses_ctx(), "expected uses_ctx() to be true for get_vec_ctx");

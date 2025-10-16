@@ -1,14 +1,15 @@
 use crate::ast::Ast;
 use crate::error::JitError;
 use crate::lexer::{Lexer, Token};
+use crate::optimizer::optimize;
 
-pub(crate) struct Parser<'a> {
+pub struct Parser<'a> {
     lex: Lexer<'a>,
     look: Token,
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn new(s: &'a str) -> Result<Self, JitError> {
+    pub fn new(s: &'a str) -> Result<Self, JitError> {
         let mut lex = Lexer::new(s);
         let look = lex.next_token()?;
         Ok(Self { lex, look })
@@ -241,5 +242,19 @@ impl<'a> Parser<'a> {
                 "expected number, identifier, or \'(\'".into(),
             )),
         }
+    }
+}
+
+
+impl<'a> Parser<'a> {
+    /// Parses and immediately prepares a PreparedExpr using the provided VarResolver.
+    pub fn parse_with_var_resolver<K, R>(self, resolver: &R) -> Result<crate::prepared::PreparedExpr<K>, JitError>
+    where
+        K: Eq + std::hash::Hash + Clone,
+        R: crate::resolver::VarResolver<K>,
+    {
+        let ast = self.parse()?;
+        let ast = optimize(ast);
+        crate::prepared::PreparedExpr::from_ast_with_resolver(ast, resolver)
     }
 }

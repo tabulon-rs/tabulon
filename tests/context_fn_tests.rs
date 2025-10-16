@@ -19,7 +19,7 @@ extern "C" fn scale_add(ctx: *mut std::ffi::c_void, a: f64, b: f64) -> f64 {
 
 #[test]
 fn unary_ctx_function_eval_with_ctx_ptr() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     eng.register_unary("add_bias", add_bias, true).unwrap();
 
     let expr = eng.compile_ref("add_bias(A)").unwrap();
@@ -32,7 +32,7 @@ fn unary_ctx_function_eval_with_ctx_ptr() {
 
 #[test]
 fn binary_ctx_function_eval_with_ctx() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     eng.register_binary("scale_add", scale_add, true).unwrap();
 
     // expression: scale_add(x, y) with bias=2.0 => 3 * 2 + 4 = 10

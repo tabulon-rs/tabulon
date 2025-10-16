@@ -8,11 +8,14 @@ mod error;
 mod lexer;
 mod optimizer;
 mod parser;
+mod prepared;
 mod registry;
 mod resolver;
 mod rt_types;
 
 pub use engine::{CompiledExpr, CompiledExprRef, Tabula};
+pub use parser::Parser;
+pub use prepared::PreparedExpr;
 
 pub use error::{JitError, VarResolveError};
 pub use registry::{FnMeta, HasCtx, FunctionForEngineCtx, SameAs};
@@ -36,7 +39,7 @@ use tabulon::{Tabula, IdentityResolver, function};
 fn needs_other(a: f64, ctx: &OtherCtx) -> f64 { a }
 
 fn main() {
-    let mut eng = Tabula::<String, IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     // Fails to compile: engine Ctx differs from function's context type
     eng.register_typed::<__tabulon_marker_needs_other>().unwrap();
 }
@@ -56,7 +59,7 @@ use tabulon::{Tabula, IdentityResolver, function, register_functions_typed};
 fn add_bias(a: f64, ctx: &Ctx) -> f64 { a + ctx.bias }
 
 fn main() {
-    let mut eng = Tabula::<String, IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     // Prefer the typed registration path for compile-time context safety
     register_functions_typed!(eng, __tabulon_marker_add_bias).unwrap();
 

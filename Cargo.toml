@@ -1,6 +1,6 @@
 [package]
 name = "tabulon"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 authors = ["kihongpark <dev.gihong2012@gmail.com>"]
 description = "A high-performance, JIT-compiled expression evaluation engine using Cranelift"

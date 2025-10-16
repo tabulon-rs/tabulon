@@ -31,9 +31,9 @@ fn test_jump_block_or() {
 
     let a = 1.0;
     let b = -1.0;
-    let c = 3.0;
     let d = 4.0;
 
-    let result = compiled.eval(&[a, b, c, d]).unwrap();
-    assert_eq!(result, 1.0);
+    // ordered_vars for this expr is ["a", "b", "d"]. Provide values in this order.
+    let result = compiled.eval(&[a, b, d]).unwrap();
+    assert_eq!(result, 5.0);
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use tabulon::{Tabula, VarResolveError, VarResolver};
+use tabulon::{Tabula, VarResolveError, VarResolver, Parser, PreparedExpr};
 
 // -----------------------------
 // u64 key resolver and test
@@ -28,9 +28,10 @@ fn u64_var_keys_work() {
     reg.insert("C".to_string(), 3);
 
     let resolver = U64Resolver { map: reg };
-    let mut eng: Tabula<u64, _> = Tabula::with_resolver(resolver);
-
-    let compiled = eng.compile_ref("(A + B) * C").unwrap();
+    let parser = Parser::new("(A + B) * C").unwrap();
+    let prepared: PreparedExpr<u64> = parser.parse_with_var_resolver(&resolver).unwrap();
+    let mut eng = Tabula::new();
+    let compiled = eng.compile_prepared_ref(&prepared).unwrap();
 
     // Provide values by u64 key
     let mut values_by_id: HashMap<u64, f64> = HashMap::new();
@@ -73,8 +74,10 @@ impl VarResolver<VarKey> for EnumResolver {
 
 #[test]
 fn enum_var_keys_work() {
-    let mut eng: Tabula<VarKey, _> = Tabula::with_resolver(EnumResolver);
-    let compiled = eng.compile_ref("(A + B) * C").unwrap();
+    let parser = Parser::new("(A + B) * C").unwrap();
+    let prepared: PreparedExpr<VarKey> = parser.parse_with_var_resolver(&EnumResolver).unwrap();
+    let mut eng = Tabula::new();
+    let compiled = eng.compile_prepared_ref(&prepared).unwrap();
 
     let mut values: HashMap<VarKey, f64> = HashMap::new();
     values.insert(VarKey::Str, 100.0);

@@ -240,7 +240,6 @@ pub(crate) fn codegen_expr<'a>(
             let rhs_block = builder.create_block();
             let merge_block = builder.create_block();
             let res = builder.append_block_param(merge_block, f64_ty);
-            let one = consts.one(builder);
             let zero = consts.zero(builder);
 
             let va = codegen_expr(

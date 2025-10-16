@@ -44,8 +44,9 @@ Use the engine to compile and evaluate an expression:
       // `eval` takes a slice of your f64 variables
       let result = expr.eval(&[power_level, is_angry_val])?;
 
-      // The expression "(9001 > 9000) && (1.0 * 10)" is true, so the result is 1.0.
-      assert_eq!(result, 1.0);
+      // The expression "(9001 > 9000) && (1.0 * 10)" short-circuits AND and returns the
+      // truthy RHS value (10.0) when both sides are true.
+      assert_eq!(result, 10.0);
       println!("It's over 9000! Result: {}", result);
 
       Ok(())

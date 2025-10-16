@@ -2,7 +2,7 @@
 /// 모든 중간 값과 최종 결과는 f64로 표현되며,
 /// 비교/논리의 결과는 true=1.0, false=0.0으로 반환됩니다.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Ast {
+pub enum Ast {
     /// 숫자 리터럴 (예: 1, 3.14)
     Num(f64),
     /// 변수 참조 (예: Str, BonusStr)

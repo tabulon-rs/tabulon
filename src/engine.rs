@@ -1,11 +1,9 @@
 use crate::ast::Ast;
 use crate::codegen::{F64Consts, codegen_expr};
-use crate::collect::collect_vars;
 use crate::error::JitError;
-#[cfg(feature = "optimize")]
-use crate::optimizer::optimize;
 use crate::parser::Parser;
-use crate::resolver::{IdentityResolver, VarResolver};
+use crate::prepared::PreparedExpr;
+use crate::resolver::IdentityResolver;
 use crate::rt_types::{Fn0, Fn1, Fn2, Fn3, JitFn, JitFnRef, RegisteredFn};
 use cranelift::codegen::settings;
 use cranelift::prelude::*;
@@ -47,29 +45,23 @@ pub extern "C" fn tabulon_pow_f64_ctx(_ctx: *mut std::ffi::c_void, base: f64, ex
 /// let result = expr.eval(&[10.0, 20.0]).unwrap();
 /// assert_eq!(result, 30.0);
 /// ```
-pub struct Tabula<K = String, R = IdentityResolver, Ctx = ()> {
-    pub(crate) resolver: R,
-    pub(crate) _phantom_k: std::marker::PhantomData<K>,
+pub struct Tabula<Ctx = ()> {
     pub(crate) _phantom_ctx: std::marker::PhantomData<Ctx>,
     pub(crate) funcs: HashMap<(String, u8), RegisteredFn>,
     pub(crate) module: Option<JITModule>,
     pub(crate) generation: Arc<AtomicUsize>,
 }
 
-impl Default for Tabula<String, IdentityResolver, ()> {
+impl Default for Tabula<()> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Tabula<String, IdentityResolver, ()> {
+impl Tabula<()> {
     /// Creates a new `Tabula` engine with the default configuration.
-    ///
-    /// The default engine uses `String` keys for variables and resolves them to themselves.
     pub fn new() -> Self {
         Self {
-            resolver: IdentityResolver,
-            _phantom_k: std::marker::PhantomData,
             _phantom_ctx: std::marker::PhantomData,
             funcs: HashMap::new(),
             module: None,
@@ -78,25 +70,6 @@ impl Tabula<String, IdentityResolver, ()> {
     }
 }
 
-impl<K, R> Tabula<K, R, ()>
-where
-    K: Clone + Eq + std::hash::Hash + Send + Sync + 'static,
-    R: VarResolver<K>,
-{
-    /// Creates a new `Tabula` engine with a custom variable resolver.
-    pub fn with_resolver(resolver: R) -> Self {
-        Self {
-            resolver,
-            _phantom_k: std::marker::PhantomData,
-            _phantom_ctx: std::marker::PhantomData,
-            funcs: HashMap::new(),
-            module: None,
-            generation: Arc::new(AtomicUsize::new(0)),
-        }
-    }
-}
-
-pub(crate) type ParsedMeta<K> = (Ast, Vec<K>, HashMap<String, usize>);
 
 fn ast_needs_bool_consts(ast: &Ast) -> bool {
     use crate::ast::Ast::*;
@@ -154,12 +127,7 @@ fn ast_uses_ctx(ast: &Ast, funcs: &HashMap<(String, u8), RegisteredFn>) -> bool 
     }
 }
 
-impl<K, R, Ctx> Tabula<K, R, Ctx>
-where
-    K: Clone + Eq + std::hash::Hash + Send + Sync + 'static,
-    R: VarResolver<K>,
-{
-
+impl<Ctx> Tabula<Ctx> {
     /// Registers a nullary (0-argument) function with the engine.
     ///
     /// Functions must be registered before any expressions are compiled.
@@ -294,37 +262,6 @@ where
         Ok(())
     }
 
-    // --- Common helpers shared by compile and compile_ref ---
-    fn parse_and_resolve(&self, expr: &str) -> Result<ParsedMeta<K>, JitError> {
-        // Parse to AST
-        let parser = Parser::new(expr)?;
-        let ast = parser.parse()?;
-        #[cfg(feature = "optimize")]
-        let ast = optimize(ast);
-
-        // Infer variables and resolve to key type K using the resolver
-        let raw_vars = collect_vars(&ast);
-        let mut ordered_vars: Vec<K> = Vec::new();
-        let mut k_to_index: HashMap<K, usize> = HashMap::new();
-        let mut var_index: HashMap<String, usize> = HashMap::new();
-        for name in raw_vars.iter() {
-            let k = match self.resolver.resolve(name) {
-                Ok(v) => v,
-                Err(_) => {
-                    return Err(JitError::UnknownIdent(name.clone()));
-                }
-            };
-            if let Some(&idx) = k_to_index.get(&k) {
-                var_index.insert(name.clone(), idx);
-            } else {
-                let idx = ordered_vars.len();
-                k_to_index.insert(k.clone(), idx);
-                ordered_vars.push(k);
-                var_index.insert(name.clone(), idx);
-            }
-        }
-        Ok((ast, ordered_vars, var_index))
-    }
 
     fn ensure_module_and_register(&mut self) -> Result<(), JitError> {
         if self.module.is_none() {
@@ -456,6 +393,44 @@ where
         Ok(code)
     }
 
+    /// Compiles a pre-parsed and prepared expression into an executable `CompiledExpr`.
+    ///
+    /// This path performs codegen only; it assumes the caller already parsed (and optionally
+    /// optimized) the AST and collected the variable ordering/indexing into a PreparedExpr.
+    pub fn compile_prepared<K>(&mut self, prepared: &PreparedExpr<K>) -> Result<CompiledExpr<K, Ctx>, JitError>
+        where K: Clone,
+    {
+        let code = self.build_and_finalize(&prepared.var_index, &prepared.ast, prepared.ordered_vars.len(), LoadMode::DirectF64)?;
+        let func_ptr: JitFn = unsafe { std::mem::transmute(code) };
+        let gen_at = self.generation.load(Ordering::Relaxed);
+        Ok(CompiledExpr::<K, Ctx> {
+            func_ptr,
+            ordered_vars: prepared.ordered_vars.clone(),
+            gen_token: self.generation.clone(),
+            gen_at_compile: gen_at,
+            uses_ctx: ast_uses_ctx(&prepared.ast, &self.funcs),
+            _phantom_ctx: std::marker::PhantomData,
+        })
+    }
+
+    /// Compiles a pre-parsed and prepared expression into an executable `CompiledExprRef` that
+    /// expects inputs as references or raw pointers.
+    pub fn compile_prepared_ref<K>(&mut self, prepared: &PreparedExpr<K>) -> Result<CompiledExprRef<K, Ctx>, JitError>
+        where K: Clone,
+    {
+        let code = self.build_and_finalize(&prepared.var_index, &prepared.ast, prepared.ordered_vars.len(), LoadMode::IndirectPtr)?;
+        let func_ptr: JitFnRef = unsafe { std::mem::transmute(code) };
+        let gen_at = self.generation.load(Ordering::Relaxed);
+        Ok(CompiledExprRef::<K, Ctx> {
+            func_ptr,
+            ordered_vars: prepared.ordered_vars.clone(),
+            gen_token: self.generation.clone(),
+            gen_at_compile: gen_at,
+            uses_ctx: ast_uses_ctx(&prepared.ast, &self.funcs),
+            _phantom_ctx: std::marker::PhantomData,
+        })
+    }
+
     /// Compiles an expression string into an executable `CompiledExpr`.
     ///
     /// This method parses, optimizes, and JIT-compiles the expression to native machine code.
@@ -464,20 +439,10 @@ where
     ///
     /// # Errors
     /// Returns a `JitError` if parsing, resolution, or compilation fails.
-    pub fn compile(&mut self, expr: &str) -> Result<CompiledExpr<K, Ctx>, JitError> {
-        let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
-        let code =
-            self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::DirectF64)?;
-        let func_ptr: JitFn = unsafe { std::mem::transmute(code) };
-        let gen_at = self.generation.load(Ordering::Relaxed);
-        Ok(CompiledExpr::<K, Ctx> {
-            func_ptr,
-            ordered_vars,
-            gen_token: self.generation.clone(),
-            gen_at_compile: gen_at,
-            uses_ctx: ast_uses_ctx(&ast, &self.funcs),
-            _phantom_ctx: std::marker::PhantomData,
-        })
+    pub fn compile(&mut self, expr: &str) -> Result<CompiledExpr<String, Ctx>, JitError> {
+        let parser = Parser::new(expr)?;
+        let prepared = parser.parse_with_var_resolver(&IdentityResolver)?;
+        self.compile_prepared(&prepared)
     }
 
     /// Compiles an expression string into an executable `CompiledExprRef`.
@@ -488,20 +453,10 @@ where
     ///
     /// # Errors
     /// Returns a `JitError` if parsing, resolution, or compilation fails.
-    pub fn compile_ref(&mut self, expr: &str) -> Result<CompiledExprRef<K, Ctx>, JitError> {
-        let (ast, ordered_vars, var_index) = self.parse_and_resolve(expr)?;
-        let code =
-            self.build_and_finalize(&var_index, &ast, ordered_vars.len(), LoadMode::IndirectPtr)?;
-        let func_ptr: JitFnRef = unsafe { std::mem::transmute(code) };
-        let gen_at = self.generation.load(Ordering::Relaxed);
-        Ok(CompiledExprRef::<K, Ctx> {
-            func_ptr,
-            ordered_vars,
-            gen_token: self.generation.clone(),
-            gen_at_compile: gen_at,
-            uses_ctx: ast_uses_ctx(&ast, &self.funcs),
-            _phantom_ctx: std::marker::PhantomData,
-        })
+    pub fn compile_ref(&mut self, expr: &str) -> Result<CompiledExprRef<String, Ctx>, JitError> {
+        let parser = Parser::new(expr)?;
+        let prepared = parser.parse_with_var_resolver(&IdentityResolver)?;
+        self.compile_prepared_ref(&prepared)
     }
 
     /// Frees all JIT-allocated memory for compiled expressions and resets the JIT module.
@@ -755,30 +710,10 @@ enum LoadMode {
 }
 
 
-impl<Ctx> Tabula<String, IdentityResolver, Ctx> {
+impl<Ctx> Tabula<Ctx> {
     /// Creates a new `Tabula` engine with the default configuration for a specific context type.
     pub fn new_ctx() -> Self {
         Self {
-            resolver: IdentityResolver,
-            _phantom_k: std::marker::PhantomData,
-            _phantom_ctx: std::marker::PhantomData,
-            funcs: HashMap::new(),
-            module: None,
-            generation: Arc::new(AtomicUsize::new(0)),
-        }
-    }
-}
-
-impl<K, R, Ctx> Tabula<K, R, Ctx>
-where
-    K: Clone + Eq + std::hash::Hash + Send + Sync + 'static,
-    R: VarResolver<K>,
-{
-    /// Creates a new `Tabula` engine with a custom variable resolver for a specific context type.
-    pub fn with_resolver_ctx(resolver: R) -> Self {
-        Self {
-            resolver,
-            _phantom_k: std::marker::PhantomData,
             _phantom_ctx: std::marker::PhantomData,
             funcs: HashMap::new(),
             module: None,

@@ -11,7 +11,7 @@ fn sqr(x: f64) -> f64 { x * x }
 
 #[test]
 fn typed_macro_with_matching_ctx() {
-    let mut eng = Tabula::<String, tabulon::IdentityResolver, Ctx>::new_ctx();
+    let mut eng = Tabula::<Ctx>::new_ctx();
     // Use the typed macro with the generated marker type
     register_functions_typed!(eng, __tabulon_marker_add_bias).unwrap();
 

@@ -1,6 +1,6 @@
 use foldhash::{HashMap, HashMapExt};
 use shipyard::{Component, IntoIter, Unique, UniqueView, ViewMut, World};
-use tabulon::{CompiledExprRef, Tabula, VarResolveError};
+use tabulon::{CompiledExprRef, Tabula, VarResolveError, Parser, PreparedExpr};
 
 struct U64Resolver;
 
@@ -44,8 +44,11 @@ fn test() {
     ns.map.insert(1, Box::new(2f64));
     let resolver = U64Resolver;
 
-    let mut engine = Tabula::with_resolver(resolver);
-    let compiled = engine.compile_ref("a + 10").expect("TODO: panic message");
+    // Build a PreparedExpr using the resolver, then compile with an engine that does not own the resolver
+    let parser = Parser::new("a + 10").unwrap();
+    let prepared: PreparedExpr<usize> = parser.parse_with_var_resolver(&resolver).unwrap();
+    let mut engine = Tabula::new();
+    let compiled = engine.compile_prepared_ref(&prepared).expect("TODO: panic message");
 
     let mut world = World::new();
     let compiled = Compiled {
@@ -106,8 +109,10 @@ fn cache_ptr_test() {
     let mut cache = Vec::new();
     let resolver = U64Resolver;
 
-    let mut engine = Tabula::with_resolver(resolver);
-    let compiled = engine.compile_ref("a + 10").expect("TODO: panic message");
+    let parser = Parser::new("a + 10").unwrap();
+    let prepared: PreparedExpr<usize> = parser.parse_with_var_resolver(&resolver).unwrap();
+    let mut engine = Tabula::new();
+    let compiled = engine.compile_prepared_ref(&prepared).expect("TODO: panic message");
     let vec = compiled
         .vars()
         .iter()

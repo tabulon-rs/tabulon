@@ -19,7 +19,7 @@ pub trait HasCtx {
     type Ctx;
 }
 
-impl<K, R, Ctx> HasCtx for crate::engine::Tabula<K, R, Ctx> {
+impl<Ctx> HasCtx for crate::engine::Tabula<Ctx> {
     type Ctx = Ctx;
 }
 
