@@ -225,8 +225,7 @@ pub(crate) fn codegen_expr<'a>(
                 module, registry, builder, var_index, var_vals, ctx_val, b, f64_ty, consts,
             )?;
             let b_true = builder.ins().fcmp(FloatCC::NotEqual, vb, zero);
-            let one = consts.one(builder);
-            let rhs_val = builder.ins().select(b_true, one, zero);
+            let rhs_val = builder.ins().select(b_true, vb, zero);
             builder.ins().jump(merge_block, &[BlockArg::Value(rhs_val)]);
 
             builder.switch_to_block(else_block);
@@ -256,14 +255,14 @@ pub(crate) fn codegen_expr<'a>(
             builder.seal_block(rhs_block);
 
             builder.switch_to_block(true_block);
-            builder.ins().jump(merge_block, &[BlockArg::Value(one)]);
+            builder.ins().jump(merge_block, &[BlockArg::Value(va)]);
 
             builder.switch_to_block(rhs_block);
             let vb = codegen_expr(
                 module, registry, builder, var_index, var_vals, ctx_val, b, f64_ty, consts,
             )?;
             let is_b_true = builder.ins().fcmp(FloatCC::NotEqual, vb, zero);
-            let b_result = builder.ins().select(is_b_true, one, zero);
+            let b_result = builder.ins().select(is_b_true, vb, zero);
             builder
                 .ins()
                 .jump(merge_block, &[BlockArg::Value(b_result)]);

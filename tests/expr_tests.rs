@@ -118,13 +118,25 @@ fn expr_logical_ops() {
     let x0 = 0.0;
     let y2 = 2.0;
     let or = eng.compile_ref("X || Y").unwrap();
-    assert_eq!(or.eval(&[&x0, &y2]).unwrap(), 1.0);
+    assert_eq!(or.eval(&[&x0, &y2]).unwrap(), 2.0);
 
     // X && Y with non-zero and zero
     let x2 = 2.0;
     let y0 = 0.0;
     let and = eng.compile_ref("X && Y").unwrap();
     assert_eq!(and.eval(&[&x2, &y0]).unwrap(), 0.0);
+
+    // X && Y if X is greater than 0 Y will be result
+    let x1 = 1.0;
+    let y3 = 3.0;
+    let and = eng.compile_ref("X && Y").unwrap();
+    assert_eq!(and.eval(&[&x1, &y3]).unwrap(), 3.0);
+
+    // X || Y X is greater than 0 X will be result
+    let x3 = 3.0;
+    let y0 = 0.0;
+    let or = eng.compile_ref("X || Y").unwrap();
+    assert_eq!(or.eval(&[&x3, &y0]).unwrap(), 3.0);
 }
 
 #[test]
