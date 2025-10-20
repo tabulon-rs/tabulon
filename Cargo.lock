@@ -863,7 +863,7 @@ dependencies = [
 
 [[package]]
 name = "tabulon"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "cranelift",
  "cranelift-jit",
@@ -883,7 +883,7 @@ dependencies = [
 
 [[package]]
 name = "tabulon_macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "quote",
  "syn",

@@ -12,19 +12,20 @@ mod prepared;
 mod registry;
 mod resolver;
 mod rt_types;
+mod analysis;
 
-pub use engine::{CompiledExpr, CompiledExprRef, Tabula};
+pub use engine::{CompiledExpr, CompiledExprRef, Tabula, VarAccessStrategy, GetVarFn};
 pub use parser::Parser;
 pub use prepared::PreparedExpr;
 
 pub use error::{JitError, VarResolveError};
-pub use registry::{FnMeta, HasCtx, FunctionForEngineCtx, SameAs};
+pub use registry::{FnMeta, HasCtx, FunctionForEngineCtx, ResolverForEngineCtx, SameAs};
 pub use resolver::{IdentityResolver, VarResolver};
 pub use rt_types::{CtxPtr, Fn0, Fn1, Fn2, Fn3, JitFn, RegisteredFn};
 
-// Re-export inventory and the #[function] macro for user crates
+// Re-export inventory and the #[function] and #[resolver] macros for user crates
 pub use inventory;
-pub use tabulon_macros::function;
+pub use tabulon_macros::{function, resolver};
 
 #[doc = r#"
 Compile-time context checking example (this snippet intentionally fails to compile to demonstrate safety):

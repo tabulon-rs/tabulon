@@ -1,6 +1,6 @@
 [package]
 name = "tabulon"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2024"
 authors = ["kihongpark <dev.gihong2012@gmail.com>"]
 description = "A high-performance, JIT-compiled expression evaluation engine using Cranelift"
@@ -25,7 +25,7 @@ cranelift-native = "0.124.2"
 thiserror = "2.0.17"
 inventory = "0.3"
 uuid = { version = "1.18.1", features = ["v4"] }
-tabulon_macros = { path = "tabulon_macros", version = "0.1.1" }
+tabulon_macros = { path = "tabulon_macros", version = "0.1.2" }
 log = "0.4.28"
 
 [dev-dependencies]

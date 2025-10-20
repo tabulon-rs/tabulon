@@ -203,3 +203,125 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     output.into()
 }
+
+
+#[proc_macro_attribute]
+pub fn resolver(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let func = parse_macro_input!(item as ItemFn);
+    let sig = &func.sig;
+    let ident = &sig.ident;
+
+    // Verify return type is f64
+    let ret_ok = match &sig.output {
+        syn::ReturnType::Type(_, ty) => matches!(**ty, Type::Path(ref tp) if tp.path.is_ident("f64")),
+        syn::ReturnType::Default => false,
+    };
+    if !ret_ok {
+        return syn::Error::new_spanned(&sig.output, "#[resolver] requires return type f64")
+            .to_compile_error()
+            .into();
+    }
+
+    // Expect exactly two parameters: one index (u32) and one &Ctx / &mut Ctx (order-flexible)
+    if sig.inputs.len() != 2 {
+        return syn::Error::new_spanned(&sig.inputs, "#[resolver] requires exactly two params: (u32, &Ctx) or (&Ctx, u32)")
+            .to_compile_error()
+            .into();
+    }
+
+    enum ResParam {
+        Index(syn::Ident),
+        Ctx { name: syn::Ident, elem_ty: Box<Type>, is_mut: bool },
+    }
+
+    let mut params: Vec<ResParam> = Vec::with_capacity(2);
+    for input in &sig.inputs {
+        match input {
+            FnArg::Typed(pt) => {
+                // id
+                let pat_ident = match &*pt.pat {
+                    Pat::Ident(pi) => pi.ident.clone(),
+                    other => {
+                        return syn::Error::new_spanned(other, "#[resolver] requires simple identifier parameters")
+                            .to_compile_error()
+                            .into();
+                    }
+                };
+                match &*pt.ty {
+                    Type::Path(tp) if tp.path.is_ident("u32") => {
+                        params.push(ResParam::Index(pat_ident));
+                    }
+                    Type::Reference(TypeReference { elem, mutability, .. }) => {
+                        params.push(ResParam::Ctx { name: pat_ident, elem_ty: elem.clone(), is_mut: mutability.is_some() });
+                    }
+                    other => {
+                        return syn::Error::new_spanned(other, "#[resolver] only supports parameter types u32 (index) and &Ctx/&mut Ctx")
+                            .to_compile_error()
+                            .into();
+                    }
+                }
+            }
+            _ => {
+                return syn::Error::new_spanned(input, "#[resolver] does not support receiver parameters")
+                    .to_compile_error()
+                    .into();
+            }
+        }
+    }
+
+    // Validate we found one of each
+    let mut idx_ident: Option<syn::Ident> = None;
+    let mut ctx_info: Option<(syn::Ident, Box<Type>, bool)> = None;
+    for p in &params {
+        match p {
+            ResParam::Index(id) => idx_ident = Some(id.clone()),
+            ResParam::Ctx { name, elem_ty, is_mut } => ctx_info = Some((name.clone(), elem_ty.clone(), *is_mut)),
+        }
+    }
+    if idx_ident.is_none() || ctx_info.is_none() {
+        return syn::Error::new_spanned(&sig.inputs, "#[resolver] requires exactly one u32 and one &Ctx/&mut Ctx parameter")
+            .to_compile_error()
+            .into();
+    }
+    let idx_var = idx_ident.unwrap();
+    let (ctx_name, ctx_ty, ctx_is_mut) = ctx_info.unwrap();
+
+    // Determine call argument order for original function
+    let mut call_args = Vec::with_capacity(2);
+    for p in &params {
+        match p {
+            ResParam::Index(_) => call_args.push(quote! { #idx_var }),
+            ResParam::Ctx { name, .. } => call_args.push(quote! { #name }),
+        }
+    }
+
+    let shim_ident = format_ident!("__tabulon_resolver_shim_{}", ident);
+    let marker_ident = format_ident!("__tabulon_resolver_marker_{}", ident);
+    let name_str = ident.to_string();
+
+    let ctx_ptr_ident = format_ident!("ctx_ptr");
+    let ctx_bind_stmt = if ctx_is_mut {
+        quote! { let #ctx_name: &mut #ctx_ty = unsafe { &mut *(#ctx_ptr_ident as *mut #ctx_ty) }; }
+    } else {
+        quote! { let #ctx_name: &#ctx_ty = unsafe { &*(#ctx_ptr_ident as *const #ctx_ty) }; }
+    };
+
+    let output = quote! {
+        #func
+
+        #[allow(non_snake_case)]
+        extern "C" fn #shim_ident(#ctx_ptr_ident: *mut std::ffi::c_void, #idx_var: u32) -> f64 {
+            #ctx_bind_stmt
+            #ident( #( #call_args ),* )
+        }
+
+        #[allow(non_camel_case_types)]
+        pub struct #marker_ident;
+        impl<EngineCtx> ::tabulon::ResolverForEngineCtx<EngineCtx> for #marker_ident where EngineCtx: ::tabulon::SameAs<#ctx_ty> {
+            const NAME: &'static str = #name_str;
+            fn addr() -> *const u8 { #shim_ident as *const u8 }
+        }
+    };
+
+    output.into()
+}

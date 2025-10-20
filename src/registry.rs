@@ -89,3 +89,18 @@ pub trait FunctionForEngineCtx<EngineCtx> {
     const USES_CTX: bool;
     fn addr() -> *const u8;
 }
+
+/// Resolver metadata bound to an engine context type. Implemented by #[resolver]-generated markers.
+pub trait ResolverForEngineCtx<EngineCtx> {
+    /// Symbol name to register with the JIT for this resolver.
+    const NAME: &'static str;
+    /// Address of the generated extern "C" shim: fn(ctx: *mut c_void, idx: u32) -> f64
+    fn addr() -> *const u8;
+}
+
+#[macro_export]
+macro_rules! register_resolver_typed {
+    ($eng:expr, $marker:path) => {{
+        $eng.set_var_getter_typed::<$marker>()
+    }};
+}
