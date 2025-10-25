@@ -1,13 +1,17 @@
-use tabulon::{Tabula, JitError};
+use tabulon::{JitError, Tabula};
 
 #[test]
 fn values_len_error_on_ref_eval() {
     let mut eng = Tabula::new();
     let expr = eng.compile_ref("A + B + C").unwrap();
-    let a = 1.0; let b = 2.0;
+    let a = 1.0;
+    let b = 2.0;
     let err = expr.eval(&[&a, &b]).unwrap_err();
     match err {
-        JitError::ValuesLen { expected, got } => { assert_eq!(expected, 3); assert_eq!(got, 2); }
+        JitError::ValuesLen { expected, got } => {
+            assert_eq!(expected, 3);
+            assert_eq!(got, 2);
+        }
         other => panic!("unexpected error: {:?}", other),
     }
 }

@@ -1,4 +1,7 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarAccessStrategy, register_resolver_typed, resolver};
+use tabulon::{
+    IdentityResolver, Parser, PreparedExpr, Tabula, VarAccessStrategy, register_resolver_typed,
+    resolver,
+};
 
 #[repr(C)]
 struct MacroCtx {
@@ -10,7 +13,11 @@ struct MacroCtx {
 impl MacroCtx {
     fn with_values(values: Vec<f64>) -> Self {
         let n = values.len();
-        Self { values, cached: vec![0.0; n], hit: vec![0; n] }
+        Self {
+            values,
+            cached: vec![0.0; n],
+            hit: vec![0; n],
+        }
     }
 }
 
@@ -19,7 +26,9 @@ impl MacroCtx {
 #[resolver]
 fn my_resolver(idx: u32, ctx: &mut MacroCtx) -> f64 {
     let i = idx as usize;
-    if ctx.hit[i] != 0 { return ctx.cached[i]; }
+    if ctx.hit[i] != 0 {
+        return ctx.cached[i];
+    }
     let v = ctx.values[i];
     ctx.cached[i] = v;
     ctx.hit[i] = 1;
@@ -37,7 +46,12 @@ fn resolver_macro_basic_and_short_circuit() {
 
     // Compile with ResolverCall; symbol is the resolver function name by default.
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "my_resolver" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "my_resolver",
+            },
+        )
         .unwrap();
 
     // Arrange: A = 0 to short-circuit the AND; only A should be fetched.
@@ -61,7 +75,12 @@ fn resolver_macro_reversed_params_works() {
     let mut eng = Tabula::<MacroCtx>::new_ctx();
     register_resolver_typed!(eng, __tabulon_resolver_marker_name_first_ctx_then_idx).unwrap();
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "name_first_ctx_then_idx" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "name_first_ctx_then_idx",
+            },
+        )
         .unwrap();
 
     let vals = vec![2.5, 3.5];

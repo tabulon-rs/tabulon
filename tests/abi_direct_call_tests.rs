@@ -1,4 +1,4 @@
-use tabulon::{Tabula, JitError};
+use tabulon::{JitError, Tabula};
 
 // Manual direct-call registration using the new ctx-first ABI (Fn2)
 extern "C" fn mul_ctx(_ctx: *mut std::ffi::c_void, a: f64, b: f64) -> f64 {
@@ -22,10 +22,14 @@ fn register_after_module_created_should_fail() {
     let _ = eng.compile_ref("A + B").unwrap();
 
     // Further registrations must fail
-    extern "C" fn id_fn(_ctx: *mut std::ffi::c_void, x: f64) -> f64 { x }
+    extern "C" fn id_fn(_ctx: *mut std::ffi::c_void, x: f64) -> f64 {
+        x
+    }
     let err = eng.register_unary("id", id_fn, false).unwrap_err();
     match err {
-        JitError::Internal(msg) => assert!(msg.contains("cannot register functions after JIT module is created")),
+        JitError::Internal(msg) => {
+            assert!(msg.contains("cannot register functions after JIT module is created"))
+        }
         _ => panic!("expected Internal error"),
     }
 }

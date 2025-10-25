@@ -137,7 +137,7 @@ fn benchmark_eval(c: &mut Criterion) {
         ),
         (
             "hyper_complex_mmo_calc",
-            "max(0, ( (power/defense) * (skill_modifier + intelligence/100.0) + if(dice(0,100)<(crit_chance+agility/10), critical_bonus*100, 0) + (threat/max(1,distance)) + a - b ) * if(is_taunted>0, 1.5, 1.0) * haste_rating + if(rage_level > 50, rage_level/50, -mana_pool/500) )"
+            "max(0, ( (power/defense) * (skill_modifier + intelligence/100.0) + if(dice(0,100)<(crit_chance+agility/10), critical_bonus*100, 0) + (threat/max(1,distance)) + a - b ) * if(is_taunted>0, 1.5, 1.0) * haste_rating + if(rage_level > 50, rage_level/50, -mana_pool/500) )",
         ),
     ];
 
@@ -195,7 +195,7 @@ fn benchmark_eval(c: &mut Criterion) {
                             "mana_pool" => Some(500.0),
                             "rage_level" => Some(75.0),
                             "haste_rating" => Some(1.1),
-                            _ => None
+                            _ => None,
                         }
                     };
                     ns
@@ -211,7 +211,6 @@ fn benchmark_eval(c: &mut Criterion) {
                 BatchSize::SmallInput,
             )
         });
-
 
         c.bench_function(&format!("tabulon_eval_{}", name), |b| {
             // Use u64-keyed resolver and map for tabulon

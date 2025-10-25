@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use tabulon::{Tabula, VarResolveError, VarResolver, Parser, PreparedExpr};
+use tabulon::{Parser, PreparedExpr, Tabula, VarResolveError, VarResolver};
 
 // -----------------------------
 // u64 key resolver and test

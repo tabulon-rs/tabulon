@@ -1,6 +1,6 @@
 use foldhash::{HashMap, HashMapExt};
 use shipyard::{Component, IntoIter, Unique, UniqueView, ViewMut, World};
-use tabulon::{CompiledExprRef, Tabula, VarResolveError, Parser, PreparedExpr};
+use tabulon::{CompiledExprRef, Parser, PreparedExpr, Tabula, VarResolveError};
 
 struct U64Resolver;
 
@@ -48,7 +48,9 @@ fn test() {
     let parser = Parser::new("a + 10").unwrap();
     let prepared: PreparedExpr<usize> = parser.parse_with_var_resolver(&resolver).unwrap();
     let mut engine = Tabula::new();
-    let compiled = engine.compile_prepared_ref(&prepared).expect("TODO: panic message");
+    let compiled = engine
+        .compile_prepared_ref(&prepared)
+        .expect("TODO: panic message");
 
     let mut world = World::new();
     let compiled = Compiled {
@@ -112,7 +114,9 @@ fn cache_ptr_test() {
     let parser = Parser::new("a + 10").unwrap();
     let prepared: PreparedExpr<usize> = parser.parse_with_var_resolver(&resolver).unwrap();
     let mut engine = Tabula::new();
-    let compiled = engine.compile_prepared_ref(&prepared).expect("TODO: panic message");
+    let compiled = engine
+        .compile_prepared_ref(&prepared)
+        .expect("TODO: panic message");
     let vec = compiled
         .vars()
         .iter()

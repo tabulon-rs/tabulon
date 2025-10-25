@@ -43,7 +43,10 @@ fn context_read_only_param() {
     register_functions!(eng, add_bias, identity).unwrap();
 
     let a = 5.0;
-    let mut ctx = Ctx { bias: 10.0, count: 0 };
+    let mut ctx = Ctx {
+        bias: 10.0,
+        count: 0,
+    };
 
     let e = eng.compile_ref("add_bias(A)").unwrap();
     let out = e.eval_with_ctx(&[&a], &mut ctx).unwrap();
@@ -61,7 +64,10 @@ fn context_param_first_position() {
 
     let a = 3.0;
     let b = 4.0;
-    let mut ctx = Ctx { bias: 2.5, count: 0 };
+    let mut ctx = Ctx {
+        bias: 2.5,
+        count: 0,
+    };
 
     let e = eng.compile_ref("bias_add_ctx_first(A, B)").unwrap();
     let out = e.eval_with_ctx(&[&a, &b], &mut ctx).unwrap();
@@ -74,7 +80,10 @@ fn context_mut_param_modifies_state() {
     register_functions!(eng, count_and_add).unwrap();
 
     let a = 1.0;
-    let mut ctx = Ctx { bias: 2.0, count: 0 };
+    let mut ctx = Ctx {
+        bias: 2.0,
+        count: 0,
+    };
 
     let e = eng.compile_ref("count_and_add(A)").unwrap();
     let out1 = e.eval_with_ctx(&[&a], &mut ctx).unwrap();
@@ -92,7 +101,7 @@ fn context_param_vec_state() {
     register_functions!(eng, get_vec_ctx).unwrap();
 
     let e = eng.compile("get_vec_ctx(A)").unwrap();
-    let mut ctx = VecCtx{vec: vec![1,2,3]};
+    let mut ctx = VecCtx { vec: vec![1, 2, 3] };
 
     let out1 = e.eval_with_ctx(&[0f64], &mut ctx).unwrap();
     assert_eq!(out1, 1.0);
@@ -108,7 +117,11 @@ fn mismatched_context_registration_error() {
     let mut eng = Tabula::<Ctx>::new_ctx();
     let err = register_functions!(eng, get_vec_ctx).unwrap_err();
     match err {
-        tabulon::JitError::Internal(msg) => assert!(msg.contains("context type mismatch"), "unexpected message: {}", msg),
+        tabulon::JitError::Internal(msg) => assert!(
+            msg.contains("context type mismatch"),
+            "unexpected message: {}",
+            msg
+        ),
         _ => panic!("expected Internal error for context type mismatch"),
     }
 }
@@ -125,16 +138,25 @@ fn uses_ctx_flags() {
     let mut eng2 = Tabula::<Ctx>::new_ctx();
     register_functions!(eng2, count_and_add).unwrap();
     let e2 = eng2.compile_ref("count_and_add(A)").unwrap();
-    assert!(e2.uses_ctx(), "expected uses_ctx() to be true for count_and_add");
+    assert!(
+        e2.uses_ctx(),
+        "expected uses_ctx() to be true for count_and_add"
+    );
 
     // get_vec_ctx with VecCtx engine
     let mut eng3 = Tabula::<VecCtx>::new_ctx();
     register_functions!(eng3, get_vec_ctx).unwrap();
     let e3 = eng3.compile_ref("get_vec_ctx(A)").unwrap();
-    assert!(e3.uses_ctx(), "expected uses_ctx() to be true for get_vec_ctx");
+    assert!(
+        e3.uses_ctx(),
+        "expected uses_ctx() to be true for get_vec_ctx"
+    );
 
     // Context-free expression should report false
     let mut eng4 = Tabula::new();
     let e4 = eng4.compile_ref("A + B * 2").unwrap();
-    assert!(!e4.uses_ctx(), "expected uses_ctx() to be false for context-free expr");
+    assert!(
+        !e4.uses_ctx(),
+        "expected uses_ctx() to be false for context-free expr"
+    );
 }

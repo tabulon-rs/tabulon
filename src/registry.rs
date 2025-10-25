@@ -100,7 +100,5 @@ pub trait ResolverForEngineCtx<EngineCtx> {
 
 #[macro_export]
 macro_rules! register_resolver_typed {
-    ($eng:expr, $marker:path) => {{
-        $eng.set_var_getter_typed::<$marker>()
-    }};
+    ($eng:expr, $marker:path) => {{ $eng.set_var_getter_typed::<$marker>() }};
 }

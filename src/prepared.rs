@@ -2,8 +2,8 @@ use crate::analysis::Analysis;
 use crate::ast::Ast;
 use crate::collect::collect_vars;
 use crate::error::JitError;
-use crate::resolver::VarResolver;
 use crate::optimizer::optimize;
+use crate::resolver::VarResolver;
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -17,13 +17,7 @@ fn compute_ast_flags(ast: &Ast) -> (bool, bool, bool, bool) {
             let (_, i, _, c) = compute_ast_flags(x);
             (true, i, true, c)
         }
-        Add(a, b)
-        | Sub(a, b)
-        | Mul(a, b)
-        | Div(a, b)
-        | Pow(a, b)
-        | Max(a, b)
-        | Min(a, b) => {
+        Add(a, b) | Sub(a, b) | Mul(a, b) | Div(a, b) | Pow(a, b) | Max(a, b) | Min(a, b) => {
             let (n1, i1, l1, c1) = compute_ast_flags(a);
             let (n2, i2, l2, c2) = compute_ast_flags(b);
             (n1 || n2, i1 || i2, l1 || l2, c1 || c2)
@@ -76,7 +70,6 @@ fn compute_ast_flags(ast: &Ast) -> (bool, bool, bool, bool) {
     }
 }
 
-
 /// An immutable, front-end preparation output that bundles the parsed AST
 /// with variable ordering and indexing metadata.
 #[derive(Clone, Debug)]
@@ -106,7 +99,10 @@ where
     K: Eq + Hash + Clone,
 {
     /// Build a PreparedExpr from an AST and a VarResolver, resolving variable names to keys `K`.
-    pub(crate) fn from_ast_with_resolver<R>(ast: Ast, resolver: &R) -> Result<PreparedExpr<K>, JitError>
+    pub(crate) fn from_ast_with_resolver<R>(
+        ast: Ast,
+        resolver: &R,
+    ) -> Result<PreparedExpr<K>, JitError>
     where
         R: VarResolver<K>,
     {
@@ -129,12 +125,13 @@ where
                 var_index.insert(name.clone(), idx);
             }
         }
-        
+
         // Optimize once and compute flags/analysis on the optimized AST
         let opt_ast = optimize(ast);
         // Pin the optimized AST on heap so node pointer keys remain stable across moves
         let boxed_ast = Box::new(opt_ast);
-        let (needs_bool_consts, has_if_like, has_logical_ops, has_comparisons) = compute_ast_flags(&boxed_ast);
+        let (needs_bool_consts, has_if_like, has_logical_ops, has_comparisons) =
+            compute_ast_flags(&boxed_ast);
         let analysis = Analysis::compute(&boxed_ast, &var_index);
 
         Ok(PreparedExpr {

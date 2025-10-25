@@ -21,7 +21,9 @@ pub struct Analysis {
 }
 
 #[inline]
-fn node_key(n: &Ast) -> usize { n as *const Ast as usize }
+fn node_key(n: &Ast) -> usize {
+    n as *const Ast as usize
+}
 
 impl Analysis {
     pub fn compute(ast: &Ast, var_index: &HashMap<String, usize>) -> Analysis {
@@ -52,15 +54,21 @@ struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
-    fn new_marks(&self) -> Vec<bool> { vec![false; self.var_index.len()] }
+    fn new_marks(&self) -> Vec<bool> {
+        vec![false; self.var_index.len()]
+    }
 
     fn or_inplace(dst: &mut [bool], src: &[bool]) {
-        for (d, s) in dst.iter_mut().zip(src.iter()) { *d = *d || *s; }
+        for (d, s) in dst.iter_mut().zip(src.iter()) {
+            *d = *d || *s;
+        }
     }
     fn and_to_indices(a: &[bool], b: &[bool]) -> Vec<usize> {
         let mut out = Vec::new();
         for (i, (&aa, &bb)) in a.iter().zip(b.iter()).enumerate() {
-            if aa && bb { out.push(i); }
+            if aa && bb {
+                out.push(i);
+            }
         }
         out
     }
@@ -72,20 +80,32 @@ impl<'a> Ctx<'a> {
             Var(name) => {
                 let mut m = self.new_marks();
                 if let Some(&idx) = self.var_index.get(name) {
-                    if let Some(slot) = m.get_mut(idx) { *slot = true; }
+                    if let Some(slot) = m.get_mut(idx) {
+                        *slot = true;
+                    }
                 }
                 m
             }
             Neg(x) | Not(x) => self.free_vars(x),
-            Add(a,b) | Sub(a,b) | Mul(a,b) | Div(a,b) | Pow(a,b) |
-            Eq(a,b) | Ne(a,b) | Lt(a,b) | Le(a,b) | Gt(a,b) | Ge(a,b) |
-            Max(a,b) | Min(a,b) => {
+            Add(a, b)
+            | Sub(a, b)
+            | Mul(a, b)
+            | Div(a, b)
+            | Pow(a, b)
+            | Eq(a, b)
+            | Ne(a, b)
+            | Lt(a, b)
+            | Le(a, b)
+            | Gt(a, b)
+            | Ge(a, b)
+            | Max(a, b)
+            | Min(a, b) => {
                 let mut m = self.free_vars(a);
                 let mb = self.free_vars(b);
                 Self::or_inplace(&mut m, &mb);
                 m
             }
-            And(a,b) => {
+            And(a, b) => {
                 let mut fv_a = self.free_vars(a);
                 let fv_b = self.free_vars(b);
                 // carry = fv(lhs) ∩ fv(rhs)
@@ -94,7 +114,7 @@ impl<'a> Ctx<'a> {
                 Self::or_inplace(&mut fv_a, &fv_b);
                 fv_a
             }
-            Or(a,b) => {
+            Or(a, b) => {
                 let mut fv_a = self.free_vars(a);
                 let fv_b = self.free_vars(b);
                 // carry = fv(lhs) ∩ fv(rhs)
@@ -103,7 +123,7 @@ impl<'a> Ctx<'a> {
                 Self::or_inplace(&mut fv_a, &fv_b);
                 fv_a
             }
-            If(c,t,e) => {
+            If(c, t, e) => {
                 let fv_c = self.free_vars(c);
                 let fv_t = self.free_vars(t);
                 let fv_e = self.free_vars(e);

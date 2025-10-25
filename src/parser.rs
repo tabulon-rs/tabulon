@@ -245,10 +245,12 @@ impl<'a> Parser<'a> {
     }
 }
 
-
 impl<'a> Parser<'a> {
     /// Parses and immediately prepares a PreparedExpr using the provided VarResolver.
-    pub fn parse_with_var_resolver<K, R>(self, resolver: &R) -> Result<crate::prepared::PreparedExpr<K>, JitError>
+    pub fn parse_with_var_resolver<K, R>(
+        self,
+        resolver: &R,
+    ) -> Result<crate::prepared::PreparedExpr<K>, JitError>
     where
         K: Eq + std::hash::Hash + Clone,
         R: crate::resolver::VarResolver<K>,

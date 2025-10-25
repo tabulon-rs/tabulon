@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, FnArg, ItemFn, Pat, PatType, Type, TypeReference};
+use syn::{FnArg, ItemFn, Pat, PatType, Type, TypeReference, parse_macro_input};
 
 // #[function]
 // Supports numeric parameters (f64) and optionally a single context parameter
@@ -15,7 +15,9 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Verify return type is f64
     let ret_ok = match &sig.output {
-        syn::ReturnType::Type(_, ty) => matches!(**ty, Type::Path(ref tp) if tp.path.is_ident("f64")),
+        syn::ReturnType::Type(_, ty) => {
+            matches!(**ty, Type::Path(ref tp) if tp.path.is_ident("f64"))
+        }
         syn::ReturnType::Default => false,
     };
     if !ret_ok {
@@ -26,8 +28,9 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Parse parameters
     enum ParamKind {
-        Num(PatType),               // f64 parameter (appears in expression)
-        Ctx {                        // &Ctx or &mut Ctx (not counted in arity)
+        Num(PatType), // f64 parameter (appears in expression)
+        Ctx {
+            // &Ctx or &mut Ctx (not counted in arity)
             name: syn::Ident,
             elem_ty: Box<Type>,
             is_mut: bool,
@@ -50,7 +53,7 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             "#[function] requires simple identifier parameters",
                         )
                         .to_compile_error()
-                        .into()
+                        .into();
                     }
                 };
 
@@ -61,7 +64,9 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         ordered.push(ParamKind::Num(pt_clone.clone()));
                         numeric_params.push(pt_clone);
                     }
-                    Type::Reference(TypeReference { elem, mutability, .. }) => {
+                    Type::Reference(TypeReference {
+                        elem, mutability, ..
+                    }) => {
                         if has_ctx {
                             return syn::Error::new_spanned(
                                 &pt.ty,
@@ -122,7 +127,11 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut ctx_bind = None;
     let mut ctx_ty_tokens: Option<Box<Type>> = None;
 
-    let ctx_param_ident = if has_ctx { format_ident!("ctx_ptr") } else { format_ident!("_ctx") };
+    let ctx_param_ident = if has_ctx {
+        format_ident!("ctx_ptr")
+    } else {
+        format_ident!("_ctx")
+    };
 
     for p in &ordered {
         match p {
@@ -133,7 +142,11 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     call_args.push(quote! { #id });
                 }
             }
-            ParamKind::Ctx { name, elem_ty, is_mut } => {
+            ParamKind::Ctx {
+                name,
+                elem_ty,
+                is_mut,
+            } => {
                 // Bind context pointer to &Ctx or &mut Ctx variable with the original name
                 let binding = if *is_mut {
                     quote! { let #name: &mut #elem_ty = unsafe { &mut *(#ctx_param_ident as *mut #elem_ty) }; }
@@ -151,11 +164,17 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let ctx_bind_stmt = ctx_bind.unwrap_or_else(|| quote! {});
 
-    let uses_ctx_lit = if has_ctx { quote! { true } } else { quote! { false } };
+    let uses_ctx_lit = if has_ctx {
+        quote! { true }
+    } else {
+        quote! { false }
+    };
 
     // Compute ctx TypeId for runtime verification at registration time.
     let ctx_type_id_expr = if has_ctx {
-        let ty = ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx");
+        let ty = ctx_ty_tokens
+            .as_ref()
+            .expect("ctx type tokens must exist when has_ctx");
         quote! { ::core::any::TypeId::of::<#ty>() }
     } else {
         quote! { ::core::any::TypeId::of::<()>() } // unused when uses_ctx=false
@@ -167,7 +186,9 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Conditional where-clause for compile-time context matching: only constrain when ctx is used
     let marker_where_clause = if has_ctx {
-        let ty = ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx");
+        let ty = ctx_ty_tokens
+            .as_ref()
+            .expect("ctx type tokens must exist when has_ctx");
         quote! { where EngineCtx: ::tabulon::SameAs<#ty> }
     } else {
         quote! {}
@@ -204,7 +225,6 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
-
 #[proc_macro_attribute]
 pub fn resolver(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let func = parse_macro_input!(item as ItemFn);
@@ -213,7 +233,9 @@ pub fn resolver(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Verify return type is f64
     let ret_ok = match &sig.output {
-        syn::ReturnType::Type(_, ty) => matches!(**ty, Type::Path(ref tp) if tp.path.is_ident("f64")),
+        syn::ReturnType::Type(_, ty) => {
+            matches!(**ty, Type::Path(ref tp) if tp.path.is_ident("f64"))
+        }
         syn::ReturnType::Default => false,
     };
     if !ret_ok {
@@ -224,14 +246,21 @@ pub fn resolver(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Expect exactly two parameters: one index (u32) and one &Ctx / &mut Ctx (order-flexible)
     if sig.inputs.len() != 2 {
-        return syn::Error::new_spanned(&sig.inputs, "#[resolver] requires exactly two params: (u32, &Ctx) or (&Ctx, u32)")
-            .to_compile_error()
-            .into();
+        return syn::Error::new_spanned(
+            &sig.inputs,
+            "#[resolver] requires exactly two params: (u32, &Ctx) or (&Ctx, u32)",
+        )
+        .to_compile_error()
+        .into();
     }
 
     enum ResParam {
         Index(syn::Ident),
-        Ctx { name: syn::Ident, elem_ty: Box<Type>, is_mut: bool },
+        Ctx {
+            name: syn::Ident,
+            elem_ty: Box<Type>,
+            is_mut: bool,
+        },
     }
 
     let mut params: Vec<ResParam> = Vec::with_capacity(2);
@@ -242,17 +271,26 @@ pub fn resolver(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let pat_ident = match &*pt.pat {
                     Pat::Ident(pi) => pi.ident.clone(),
                     other => {
-                        return syn::Error::new_spanned(other, "#[resolver] requires simple identifier parameters")
-                            .to_compile_error()
-                            .into();
+                        return syn::Error::new_spanned(
+                            other,
+                            "#[resolver] requires simple identifier parameters",
+                        )
+                        .to_compile_error()
+                        .into();
                     }
                 };
                 match &*pt.ty {
                     Type::Path(tp) if tp.path.is_ident("u32") => {
                         params.push(ResParam::Index(pat_ident));
                     }
-                    Type::Reference(TypeReference { elem, mutability, .. }) => {
-                        params.push(ResParam::Ctx { name: pat_ident, elem_ty: elem.clone(), is_mut: mutability.is_some() });
+                    Type::Reference(TypeReference {
+                        elem, mutability, ..
+                    }) => {
+                        params.push(ResParam::Ctx {
+                            name: pat_ident,
+                            elem_ty: elem.clone(),
+                            is_mut: mutability.is_some(),
+                        });
                     }
                     other => {
                         return syn::Error::new_spanned(other, "#[resolver] only supports parameter types u32 (index) and &Ctx/&mut Ctx")
@@ -262,9 +300,12 @@ pub fn resolver(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }
             _ => {
-                return syn::Error::new_spanned(input, "#[resolver] does not support receiver parameters")
-                    .to_compile_error()
-                    .into();
+                return syn::Error::new_spanned(
+                    input,
+                    "#[resolver] does not support receiver parameters",
+                )
+                .to_compile_error()
+                .into();
             }
         }
     }
@@ -275,13 +316,20 @@ pub fn resolver(_attr: TokenStream, item: TokenStream) -> TokenStream {
     for p in &params {
         match p {
             ResParam::Index(id) => idx_ident = Some(id.clone()),
-            ResParam::Ctx { name, elem_ty, is_mut } => ctx_info = Some((name.clone(), elem_ty.clone(), *is_mut)),
+            ResParam::Ctx {
+                name,
+                elem_ty,
+                is_mut,
+            } => ctx_info = Some((name.clone(), elem_ty.clone(), *is_mut)),
         }
     }
     if idx_ident.is_none() || ctx_info.is_none() {
-        return syn::Error::new_spanned(&sig.inputs, "#[resolver] requires exactly one u32 and one &Ctx/&mut Ctx parameter")
-            .to_compile_error()
-            .into();
+        return syn::Error::new_spanned(
+            &sig.inputs,
+            "#[resolver] requires exactly one u32 and one &Ctx/&mut Ctx parameter",
+        )
+        .to_compile_error()
+        .into();
     }
     let idx_var = idx_ident.unwrap();
     let (ctx_name, ctx_ty, ctx_is_mut) = ctx_info.unwrap();

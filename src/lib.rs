@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod analysis;
 mod ast;
 mod codegen;
 mod collect;
@@ -12,14 +13,13 @@ mod prepared;
 mod registry;
 mod resolver;
 mod rt_types;
-mod analysis;
 
-pub use engine::{CompiledExpr, CompiledExprRef, Tabula, VarAccessStrategy, GetVarFn};
+pub use engine::{CompiledExpr, CompiledExprRef, GetVarFn, Tabula, VarAccessStrategy};
 pub use parser::Parser;
 pub use prepared::PreparedExpr;
 
 pub use error::{JitError, VarResolveError};
-pub use registry::{FnMeta, HasCtx, FunctionForEngineCtx, ResolverForEngineCtx, SameAs};
+pub use registry::{FnMeta, FunctionForEngineCtx, HasCtx, ResolverForEngineCtx, SameAs};
 pub use resolver::{IdentityResolver, VarResolver};
 pub use rt_types::{CtxPtr, Fn0, Fn1, Fn2, Fn3, JitFn, RegisteredFn};
 

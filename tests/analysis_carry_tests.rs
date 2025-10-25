@@ -1,4 +1,4 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarAccessStrategy};
+use tabulon::{IdentityResolver, Parser, PreparedExpr, Tabula, VarAccessStrategy};
 
 #[repr(C)]
 struct EvalCtx {
@@ -42,14 +42,21 @@ fn or_short_circuit_resolver() {
     let prepared: PreparedExpr<String> = parser.parse_with_var_resolver(&IdentityResolver).unwrap();
 
     let mut name_to_idx = std::collections::HashMap::new();
-    for (i, k) in prepared.ordered_vars.iter().enumerate() { name_to_idx.insert(k.as_str(), i); }
+    for (i, k) in prepared.ordered_vars.iter().enumerate() {
+        name_to_idx.insert(k.as_str(), i);
+    }
     let gi = |n: &str| *name_to_idx.get(n).unwrap();
 
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_counting).unwrap();
 
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_counting" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_counting",
+            },
+        )
         .unwrap();
 
     // Case 1: A != 0 → RHS should not be fetched
@@ -72,9 +79,21 @@ fn or_short_circuit_resolver() {
     let mut ctx2 = EvalCtx::with_values(vals);
     ctx2.values[gi("A")] = 0.0;
     let out2 = compiled.eval_resolver_ctx(&mut ctx2).unwrap();
-    assert!((out2 - (if ctx2.values[gi("B")] != 0.0 { ctx2.values[gi("B")] } else { 0.0 })).abs() < 1e-12);
+    assert!(
+        (out2
+            - (if ctx2.values[gi("B")] != 0.0 {
+                ctx2.values[gi("B")]
+            } else {
+                0.0
+            }))
+        .abs()
+            < 1e-12
+    );
     // We don't assert exact calls here because it depends on both A and B; ensure at least one call to B when A==0
-    assert!(ctx2.call_counts[gi("B")] >= 1, "B should be fetched when A==0");
+    assert!(
+        ctx2.call_counts[gi("B")] >= 1,
+        "B should be fetched when A==0"
+    );
 }
 
 #[test]
@@ -84,13 +103,20 @@ fn ifs_carry_resolver_counts() {
     let prepared: PreparedExpr<String> = parser.parse_with_var_resolver(&IdentityResolver).unwrap();
 
     let mut name_to_idx = std::collections::HashMap::new();
-    for (i, k) in prepared.ordered_vars.iter().enumerate() { name_to_idx.insert(k.as_str(), i); }
+    for (i, k) in prepared.ordered_vars.iter().enumerate() {
+        name_to_idx.insert(k.as_str(), i);
+    }
     let gi = |n: &str| *name_to_idx.get(n).unwrap();
 
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_counting).unwrap();
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_counting" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_counting",
+            },
+        )
         .unwrap();
 
     // Case 1: A true → take then1 (B + C). Carry set should prefetch C once.
@@ -106,11 +132,22 @@ fn ifs_carry_resolver_counts() {
 
     let mut expected_calls = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls[gi("A")] = 1; expected_misses[gi("A")] = 1;
-    expected_calls[gi("B")] = 1; expected_misses[gi("B")] = 1;
-    expected_calls[gi("C")] = 1; expected_misses[gi("C")] = 1;
-    assert_eq!(ctx.call_counts, expected_calls, "case1 calls: {:?}", ctx.call_counts);
-    assert_eq!(ctx.miss_counts, expected_misses, "case1 misses: {:?}", ctx.miss_counts);
+    expected_calls[gi("A")] = 1;
+    expected_misses[gi("A")] = 1;
+    expected_calls[gi("B")] = 1;
+    expected_misses[gi("B")] = 1;
+    expected_calls[gi("C")] = 1;
+    expected_misses[gi("C")] = 1;
+    assert_eq!(
+        ctx.call_counts, expected_calls,
+        "case1 calls: {:?}",
+        ctx.call_counts
+    );
+    assert_eq!(
+        ctx.miss_counts, expected_misses,
+        "case1 misses: {:?}",
+        ctx.miss_counts
+    );
 
     // Case 2: A false, D true → take then2 (C + E). C is shared (carry) and should be resolved once overall.
     let mut vals2 = vec![0.0; prepared.ordered_vars.len()];
@@ -126,12 +163,24 @@ fn ifs_carry_resolver_counts() {
     // Expected along this path: A, D, C, E are fetched once; B not fetched.
     let mut expected_calls2 = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses2 = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls2[gi("A")] = 1; expected_misses2[gi("A")] = 1;
-    expected_calls2[gi("D")] = 1; expected_misses2[gi("D")] = 1;
-    expected_calls2[gi("C")] = 1; expected_misses2[gi("C")] = 1;
-    expected_calls2[gi("E")] = 1; expected_misses2[gi("E")] = 1;
-    assert_eq!(ctx2.call_counts, expected_calls2, "case2 calls: {:?}", ctx2.call_counts);
-    assert_eq!(ctx2.miss_counts, expected_misses2, "case2 misses: {:?}", ctx2.miss_counts);
+    expected_calls2[gi("A")] = 1;
+    expected_misses2[gi("A")] = 1;
+    expected_calls2[gi("D")] = 1;
+    expected_misses2[gi("D")] = 1;
+    expected_calls2[gi("C")] = 1;
+    expected_misses2[gi("C")] = 1;
+    expected_calls2[gi("E")] = 1;
+    expected_misses2[gi("E")] = 1;
+    assert_eq!(
+        ctx2.call_counts, expected_calls2,
+        "case2 calls: {:?}",
+        ctx2.call_counts
+    );
+    assert_eq!(
+        ctx2.miss_counts, expected_misses2,
+        "case2 misses: {:?}",
+        ctx2.miss_counts
+    );
 
     // Case 3: A false, D false → else returns C (carry should still ensure C resolved once).
     let mut vals3 = vec![0.0; prepared.ordered_vars.len()];
@@ -146,9 +195,20 @@ fn ifs_carry_resolver_counts() {
 
     let mut expected_calls3 = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses3 = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls3[gi("A")] = 1; expected_misses3[gi("A")] = 1;
-    expected_calls3[gi("D")] = 1; expected_misses3[gi("D")] = 1;
-    expected_calls3[gi("C")] = 1; expected_misses3[gi("C")] = 1;
-    assert_eq!(ctx3.call_counts, expected_calls3, "case3 calls: {:?}", ctx3.call_counts);
-    assert_eq!(ctx3.miss_counts, expected_misses3, "case3 misses: {:?}", ctx3.miss_counts);
+    expected_calls3[gi("A")] = 1;
+    expected_misses3[gi("A")] = 1;
+    expected_calls3[gi("D")] = 1;
+    expected_misses3[gi("D")] = 1;
+    expected_calls3[gi("C")] = 1;
+    expected_misses3[gi("C")] = 1;
+    assert_eq!(
+        ctx3.call_counts, expected_calls3,
+        "case3 calls: {:?}",
+        ctx3.call_counts
+    );
+    assert_eq!(
+        ctx3.miss_counts, expected_misses3,
+        "case3 misses: {:?}",
+        ctx3.miss_counts
+    );
 }

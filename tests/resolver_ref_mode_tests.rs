@@ -1,4 +1,4 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarAccessStrategy};
+use tabulon::{IdentityResolver, Parser, PreparedExpr, Tabula, VarAccessStrategy};
 
 #[repr(C)]
 struct RefCtx {
@@ -11,7 +11,12 @@ struct RefCtx {
 impl RefCtx {
     fn with_values(values: Vec<f64>) -> Self {
         let n = values.len();
-        Self { values, cached: vec![0.0; n], hit: vec![0; n], call_counts: vec![0; n] }
+        Self {
+            values,
+            cached: vec![0.0; n],
+            hit: vec![0; n],
+            call_counts: vec![0; n],
+        }
     }
 }
 
@@ -19,7 +24,9 @@ impl RefCtx {
 fn ref_mode_resolver(idx: u32, ctx: &mut RefCtx) -> f64 {
     let i = idx as usize;
     ctx.call_counts[i] = ctx.call_counts[i].saturating_add(1);
-    if ctx.hit[i] != 0 { return ctx.cached[i]; }
+    if ctx.hit[i] != 0 {
+        return ctx.cached[i];
+    }
     let v = ctx.values[i];
     ctx.cached[i] = v;
     ctx.hit[i] = 1;
@@ -34,7 +41,9 @@ fn resolver_ref_eval_basic() {
 
     // Build name->index map
     let mut idx_of = std::collections::HashMap::new();
-    for (i, k) in prepared.ordered_vars.iter().enumerate() { idx_of.insert(k.as_str(), i); }
+    for (i, k) in prepared.ordered_vars.iter().enumerate() {
+        idx_of.insert(k.as_str(), i);
+    }
     let gi = |n: &str| *idx_of.get(n).unwrap();
 
     let mut eng = Tabula::<RefCtx>::new_ctx();
@@ -42,7 +51,12 @@ fn resolver_ref_eval_basic() {
 
     // Compile ref variant with ResolverCall
     let compiled_ref = eng
-        .compile_prepared_ref_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "ref_mode_resolver" })
+        .compile_prepared_ref_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "ref_mode_resolver",
+            },
+        )
         .unwrap();
 
     // Set values and evaluate via eval_resolver_ctx (no &f64 slice or pointer array required)

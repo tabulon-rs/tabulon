@@ -78,16 +78,16 @@ fn tabulon_matches_fasteval_on_random_inputs() {
 
     // Randomized trials per expression
     let trials = 200usize;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for (expr, compiled) in compiled_tabulon.into_iter() {
         for _ in 0..trials {
             // Generate stable set of variable values
             let mut vars: HashMap<String, f64> = HashMap::new();
             // Keep the range moderate to avoid extreme FP values; ensure c != -1 to keep (c+1) away from zero
-            let a: f64 = rng.gen_range(-100.0..100.0);
-            let b: f64 = rng.gen_range(-100.0..100.0);
-            let mut c: f64 = rng.gen_range(-100.0..100.0);
+            let a: f64 = rng.random_range(-100.0..100.0);
+            let b: f64 = rng.random_range(-100.0..100.0);
+            let mut c: f64 = rng.random_range(-100.0..100.0);
             if (c + 1.0).abs() < 1e-6 {
                 c += 2.0;
             }

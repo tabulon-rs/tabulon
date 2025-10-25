@@ -1,10 +1,17 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarResolver, VarResolveError};
+use tabulon::{IdentityResolver, Parser, PreparedExpr, Tabula, VarResolveError, VarResolver};
 
 #[test]
 fn prepared_expr_pipeline_string() {
     let parser = Parser::new("(Str + BonusStr) * MulStr").unwrap();
     let prepared: PreparedExpr<String> = parser.parse_with_var_resolver(&IdentityResolver).unwrap();
-    assert_eq!(prepared.ordered_vars, vec!["Str".to_string(), "BonusStr".to_string(), "MulStr".to_string()]);
+    assert_eq!(
+        prepared.ordered_vars,
+        vec![
+            "Str".to_string(),
+            "BonusStr".to_string(),
+            "MulStr".to_string()
+        ]
+    );
 
     let mut eng = Tabula::new();
     let compiled = eng.compile_prepared(&prepared).unwrap();

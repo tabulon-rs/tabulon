@@ -1,4 +1,4 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarAccessStrategy};
+use tabulon::{IdentityResolver, Parser, PreparedExpr, Tabula, VarAccessStrategy};
 
 #[repr(C)]
 struct EvalCtx {
@@ -41,14 +41,25 @@ fn resolver_basic_eval() {
     // (A + B) * C with ResolverCall
     let parser = Parser::new("(A + B) * C").unwrap();
     let prepared: PreparedExpr<String> = parser.parse_with_var_resolver(&IdentityResolver).unwrap();
-    assert_eq!(prepared.ordered_vars, vec!["A", "B", "C"].into_iter().map(String::from).collect::<Vec<_>>());
+    assert_eq!(
+        prepared.ordered_vars,
+        vec!["A", "B", "C"]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+    );
 
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     // Register the test resolver via macro (typed)
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_test).unwrap();
 
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_test" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_test",
+            },
+        )
         .unwrap();
 
     // Values for A,B,C
@@ -79,18 +90,25 @@ fn resolver_short_circuit_and_if_skips_unneeded_vars() {
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_test).unwrap();
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_test" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_test",
+            },
+        )
         .unwrap();
 
     // Arrange values: A = 0 causes first AND to short-circuit → no other vars should be fetched.
     let mut vals = vec![0.0; prepared.ordered_vars.len()];
     // Set some arbitrary non-zero values for others; they should not be touched.
-    for v in vals.iter_mut() { *v = 42.0; }
+    for v in vals.iter_mut() {
+        *v = 42.0;
+    }
     vals[idx("A")] = 0.0;
 
     let mut ctx = EvalCtx::with_values(vals);
     let out = compiled.eval_resolver_ctx(&mut ctx).unwrap();
-    
+
     // Result should be 0.0 due to short-circuit
     assert!(out.abs() < 1e-12);
 
@@ -100,8 +118,16 @@ fn resolver_short_circuit_and_if_skips_unneeded_vars() {
     expected_calls[idx("A")] = 1;
     expected_misses[idx("A")] = 1;
 
-    assert_eq!(ctx.call_counts, expected_calls, "unexpected resolver call pattern: {:?}", ctx.call_counts);
-    assert_eq!(ctx.miss_counts, expected_misses, "unexpected resolver miss pattern: {:?}", ctx.miss_counts);
+    assert_eq!(
+        ctx.call_counts, expected_calls,
+        "unexpected resolver call pattern: {:?}",
+        ctx.call_counts
+    );
+    assert_eq!(
+        ctx.miss_counts, expected_misses,
+        "unexpected resolver miss pattern: {:?}",
+        ctx.miss_counts
+    );
 }
 
 #[test]
@@ -119,7 +145,12 @@ fn resolver_nested_if_memoizes_across_multiple_uses() {
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_test).unwrap();
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_test" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_test",
+            },
+        )
         .unwrap();
 
     // Choose values to take the else-then path:
@@ -159,6 +190,14 @@ fn resolver_nested_if_memoizes_across_multiple_uses() {
     expected_misses[ib] = 1;
     expected_misses[ic] = 1;
 
-    assert_eq!(ctx.call_counts, expected_calls, "call counts: {:?}", ctx.call_counts);
-    assert_eq!(ctx.miss_counts, expected_misses, "miss counts: {:?}", ctx.miss_counts);
+    assert_eq!(
+        ctx.call_counts, expected_calls,
+        "call counts: {:?}",
+        ctx.call_counts
+    );
+    assert_eq!(
+        ctx.miss_counts, expected_misses,
+        "miss counts: {:?}",
+        ctx.miss_counts
+    );
 }

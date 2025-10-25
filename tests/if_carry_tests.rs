@@ -1,4 +1,4 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarAccessStrategy};
+use tabulon::{IdentityResolver, Parser, PreparedExpr, Tabula, VarAccessStrategy};
 
 #[repr(C)]
 struct EvalCtx {
@@ -12,7 +12,13 @@ struct EvalCtx {
 impl EvalCtx {
     fn with_values(values: Vec<f64>) -> Self {
         let n = values.len();
-        Self { values, cached: vec![0.0; n], hit: vec![0; n], call_counts: vec![0; n], miss_counts: vec![0; n] }
+        Self {
+            values,
+            cached: vec![0.0; n],
+            hit: vec![0; n],
+            call_counts: vec![0; n],
+            miss_counts: vec![0; n],
+        }
     }
 }
 
@@ -20,7 +26,9 @@ impl EvalCtx {
 fn get_var_counting(idx: u32, ctx: &mut EvalCtx) -> f64 {
     let i = idx as usize;
     ctx.call_counts[i] = ctx.call_counts[i].saturating_add(1);
-    if ctx.hit[i] != 0 { return ctx.cached[i]; }
+    if ctx.hit[i] != 0 {
+        return ctx.cached[i];
+    }
     ctx.miss_counts[i] = ctx.miss_counts[i].saturating_add(1);
     let v = ctx.values[i];
     ctx.cached[i] = v;
@@ -35,13 +43,20 @@ fn if_carry_shared_var_then_branch() {
     let prepared: PreparedExpr<String> = parser.parse_with_var_resolver(&IdentityResolver).unwrap();
 
     let mut idx = std::collections::HashMap::new();
-    for (i, k) in prepared.ordered_vars.iter().enumerate() { idx.insert(k.as_str(), i); }
+    for (i, k) in prepared.ordered_vars.iter().enumerate() {
+        idx.insert(k.as_str(), i);
+    }
     let gi = |n: &str| *idx.get(n).unwrap();
 
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_counting).unwrap();
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_counting" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_counting",
+            },
+        )
         .unwrap();
 
     let mut vals = vec![0.0; prepared.ordered_vars.len()];
@@ -56,11 +71,22 @@ fn if_carry_shared_var_then_branch() {
 
     let mut expected_calls = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls[gi("A")] = 1; expected_misses[gi("A")] = 1;
-    expected_calls[gi("B")] = 1; expected_misses[gi("B")] = 1;
-    expected_calls[gi("C")] = 1; expected_misses[gi("C")] = 1; // shared var
-    assert_eq!(ctx.call_counts, expected_calls, "calls: {:?}", ctx.call_counts);
-    assert_eq!(ctx.miss_counts, expected_misses, "misses: {:?}", ctx.miss_counts);
+    expected_calls[gi("A")] = 1;
+    expected_misses[gi("A")] = 1;
+    expected_calls[gi("B")] = 1;
+    expected_misses[gi("B")] = 1;
+    expected_calls[gi("C")] = 1;
+    expected_misses[gi("C")] = 1; // shared var
+    assert_eq!(
+        ctx.call_counts, expected_calls,
+        "calls: {:?}",
+        ctx.call_counts
+    );
+    assert_eq!(
+        ctx.miss_counts, expected_misses,
+        "misses: {:?}",
+        ctx.miss_counts
+    );
 }
 
 #[test]
@@ -70,13 +96,20 @@ fn if_carry_shared_var_else_branch() {
     let prepared: PreparedExpr<String> = parser.parse_with_var_resolver(&IdentityResolver).unwrap();
 
     let mut idx = std::collections::HashMap::new();
-    for (i, k) in prepared.ordered_vars.iter().enumerate() { idx.insert(k.as_str(), i); }
+    for (i, k) in prepared.ordered_vars.iter().enumerate() {
+        idx.insert(k.as_str(), i);
+    }
     let gi = |n: &str| *idx.get(n).unwrap();
 
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_counting).unwrap();
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_counting" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_counting",
+            },
+        )
         .unwrap();
 
     let mut vals = vec![0.0; prepared.ordered_vars.len()];
@@ -91,9 +124,20 @@ fn if_carry_shared_var_else_branch() {
 
     let mut expected_calls = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls[gi("A")] = 1; expected_misses[gi("A")] = 1;
-    expected_calls[gi("C")] = 1; expected_misses[gi("C")] = 1; // shared var
-    expected_calls[gi("D")] = 1; expected_misses[gi("D")] = 1;
-    assert_eq!(ctx.call_counts, expected_calls, "calls: {:?}", ctx.call_counts);
-    assert_eq!(ctx.miss_counts, expected_misses, "misses: {:?}", ctx.miss_counts);
+    expected_calls[gi("A")] = 1;
+    expected_misses[gi("A")] = 1;
+    expected_calls[gi("C")] = 1;
+    expected_misses[gi("C")] = 1; // shared var
+    expected_calls[gi("D")] = 1;
+    expected_misses[gi("D")] = 1;
+    assert_eq!(
+        ctx.call_counts, expected_calls,
+        "calls: {:?}",
+        ctx.call_counts
+    );
+    assert_eq!(
+        ctx.miss_counts, expected_misses,
+        "misses: {:?}",
+        ctx.miss_counts
+    );
 }

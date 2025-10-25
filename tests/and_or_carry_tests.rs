@@ -1,4 +1,4 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarAccessStrategy};
+use tabulon::{IdentityResolver, Parser, PreparedExpr, Tabula, VarAccessStrategy};
 
 #[repr(C)]
 struct EvalCtx {
@@ -54,7 +54,12 @@ fn and_shared_var_resolved_once() {
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_test).unwrap();
 
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_test" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_test",
+            },
+        )
         .unwrap();
 
     let mut vals = vec![0.0; prepared.ordered_vars.len()];
@@ -68,11 +73,21 @@ fn and_shared_var_resolved_once() {
     // Expect exactly one miss for A and one for B
     let mut expected_calls = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls[ia] = 1; expected_misses[ia] = 1;
-    expected_calls[ib] = 1; expected_misses[ib] = 1;
+    expected_calls[ia] = 1;
+    expected_misses[ia] = 1;
+    expected_calls[ib] = 1;
+    expected_misses[ib] = 1;
 
-    assert_eq!(ctx.call_counts, expected_calls, "AND shared var A should be resolved once; calls={:?}", ctx.call_counts);
-    assert_eq!(ctx.miss_counts, expected_misses, "AND shared var A should miss once; misses={:?}", ctx.miss_counts);
+    assert_eq!(
+        ctx.call_counts, expected_calls,
+        "AND shared var A should be resolved once; calls={:?}",
+        ctx.call_counts
+    );
+    assert_eq!(
+        ctx.miss_counts, expected_misses,
+        "AND shared var A should miss once; misses={:?}",
+        ctx.miss_counts
+    );
 }
 
 #[test]
@@ -91,7 +106,12 @@ fn or_shared_var_and_short_circuit() {
     let mut eng = Tabula::<EvalCtx>::new_ctx();
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_test).unwrap();
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_test" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_test",
+            },
+        )
         .unwrap();
 
     // A = 0.0 so RHS runs; A appears in both -> only once
@@ -103,10 +123,20 @@ fn or_shared_var_and_short_circuit() {
 
     let mut expected_calls = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls[ia] = 1; expected_misses[ia] = 1;
-    expected_calls[ib] = 1; expected_misses[ib] = 1;
-    assert_eq!(ctx.call_counts, expected_calls, "OR shared var A should be resolved once when RHS runs; calls={:?}", ctx.call_counts);
-    assert_eq!(ctx.miss_counts, expected_misses, "OR shared var A should miss once when RHS runs; misses={:?}", ctx.miss_counts);
+    expected_calls[ia] = 1;
+    expected_misses[ia] = 1;
+    expected_calls[ib] = 1;
+    expected_misses[ib] = 1;
+    assert_eq!(
+        ctx.call_counts, expected_calls,
+        "OR shared var A should be resolved once when RHS runs; calls={:?}",
+        ctx.call_counts
+    );
+    assert_eq!(
+        ctx.miss_counts, expected_misses,
+        "OR shared var A should miss once when RHS runs; misses={:?}",
+        ctx.miss_counts
+    );
 
     // Case 2: A != 0 -> LHS true, RHS skipped; B untouched
     let mut vals2 = vec![0.0; prepared.ordered_vars.len()];
@@ -117,8 +147,17 @@ fn or_shared_var_and_short_circuit() {
 
     let mut expected_calls2 = vec![0u32; prepared.ordered_vars.len()];
     let mut expected_misses2 = vec![0u32; prepared.ordered_vars.len()];
-    expected_calls2[ia] = 1; expected_misses2[ia] = 1; // A evaluated once
+    expected_calls2[ia] = 1;
+    expected_misses2[ia] = 1; // A evaluated once
     // B should remain zero
-    assert_eq!(ctx2.call_counts, expected_calls2, "OR short-circuit should avoid B; calls={:?}", ctx2.call_counts);
-    assert_eq!(ctx2.miss_counts, expected_misses2, "OR short-circuit should avoid B; misses={:?}", ctx2.miss_counts);
+    assert_eq!(
+        ctx2.call_counts, expected_calls2,
+        "OR short-circuit should avoid B; calls={:?}",
+        ctx2.call_counts
+    );
+    assert_eq!(
+        ctx2.miss_counts, expected_misses2,
+        "OR short-circuit should avoid B; misses={:?}",
+        ctx2.miss_counts
+    );
 }

@@ -1,13 +1,19 @@
 use tabulon::{Tabula, function};
 
 #[derive(Debug)]
-struct Ctx { bias: f64 }
+struct Ctx {
+    bias: f64,
+}
 
 #[function]
-fn add_bias(a: f64, ctx: &Ctx) -> f64 { a + ctx.bias }
+fn add_bias(a: f64, ctx: &Ctx) -> f64 {
+    a + ctx.bias
+}
 
 #[function]
-fn sqr(x: f64) -> f64 { x * x }
+fn sqr(x: f64) -> f64 {
+    x * x
+}
 
 #[test]
 fn register_typed_with_matching_ctx() {

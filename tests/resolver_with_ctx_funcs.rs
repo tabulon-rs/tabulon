@@ -1,4 +1,4 @@
-use tabulon::{Parser, PreparedExpr, Tabula, IdentityResolver, VarAccessStrategy};
+use tabulon::{IdentityResolver, Parser, PreparedExpr, Tabula, VarAccessStrategy};
 
 #[repr(C)]
 struct MixedCtx {
@@ -71,10 +71,16 @@ fn resolver_and_custom_fn_share_ctx() {
     let mut eng = Tabula::<MixedCtx>::new_ctx();
     // Register resolver and custom functions via macros (typed)
     tabulon::register_resolver_typed!(eng, __tabulon_resolver_marker_get_var_both).unwrap();
-    tabulon::register_functions_typed!(eng, __tabulon_marker_add_bias, __tabulon_marker_mul_fac).unwrap();
+    tabulon::register_functions_typed!(eng, __tabulon_marker_add_bias, __tabulon_marker_mul_fac)
+        .unwrap();
 
     let compiled = eng
-        .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: "get_var_both" })
+        .compile_prepared_with(
+            &prepared,
+            VarAccessStrategy::ResolverCall {
+                symbol: "get_var_both",
+            },
+        )
         .unwrap();
 
     // Values: A=2, B=3, C=5; ctx: bias=10, factor=4

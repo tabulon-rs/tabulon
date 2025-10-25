@@ -51,7 +51,11 @@ fn eval_ptrs_with_stable_boxed_slice_and_rebuilt_ptrs2() -> Result<(), JitError>
     map.insert("a", Box::new(1f64));
     map.insert("b", Box::new(2f64));
 
-    let vec = compiled.vars().iter().map(|var| map.get(var.as_str()).unwrap().as_ref() as *const f64).collect::<Vec<_>>();
+    let vec = compiled
+        .vars()
+        .iter()
+        .map(|var| map.get(var.as_str()).unwrap().as_ref() as *const f64)
+        .collect::<Vec<_>>();
 
     let result = compiled.eval_ptrs(&vec)?;
     assert_eq!(result, 5.0);
@@ -92,31 +96,31 @@ fn insert_property_bag(
     property_bag.map.insert("a".into(), Box::new(1f64));
     property_bag.map.insert("b".into(), Box::new(2f64));
 
-    property_bag.vec = compiled.0.vars().iter().map(|var| property_bag.map.get(var.as_str()).unwrap().as_ref() as *const f64).collect::<Vec<_>>();
+    property_bag.vec = compiled
+        .0
+        .vars()
+        .iter()
+        .map(|var| property_bag.map.get(var.as_str()).unwrap().as_ref() as *const f64)
+        .collect::<Vec<_>>();
     entities_view_mut.add_entity(property_bags, property_bag);
 }
 
-fn system_eval(
-    property_bag: View<PropertyBag>,
-    compiled: UniqueView<Compiled>,
-) {
-    (property_bag).iter().for_each( |pb| {
+fn system_eval(property_bag: View<PropertyBag>, compiled: UniqueView<Compiled>) {
+    (property_bag).iter().for_each(|pb| {
         let result = compiled.0.eval_ptrs(&pb.vec).unwrap();
         println!("result: {result}");
     });
 }
 
-fn upsert_pb(
-    mut property_bag: ViewMut<PropertyBag>,
-) {
-    (&mut property_bag).iter().for_each( |pb| {
+fn upsert_pb(mut property_bag: ViewMut<PropertyBag>) {
+    (&mut property_bag).iter().for_each(|pb| {
         pb.map.entry("a".into()).and_modify(|v| **v = 10f64);
         pb.map.entry("b".into()).and_modify(|v| **v = 10f64);
     });
 }
 
 #[test]
-fn eval_ptrs_with_stable_boxed_slice_and_rebuilt_ptrs3 () {
+fn eval_ptrs_with_stable_boxed_slice_and_rebuilt_ptrs3() {
     let mut engine = Tabula::new();
     let compiled = engine.compile_ref("a + b * 2").unwrap();
 
