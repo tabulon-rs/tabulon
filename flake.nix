@@ -9,7 +9,7 @@
       let pkgs = nixpkgs.legacyPackages.${system};
       in {
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [ pkgs.rustup pkgs.nixfmt-classic ];
+          nativeBuildInputs = [ pkgs.rustup pkgs.just pkgs.nixfmt-classic ];
         };
         formatter = pkgs.nixfmt-classic;
       });
