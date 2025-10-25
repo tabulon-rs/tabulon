@@ -18,20 +18,21 @@ name = "eval-bench"
 harness = false
 
 [dependencies]
-cranelift = "0.124.2"
-cranelift-jit = "0.124.2"
-cranelift-module = "0.124.2"
-cranelift-native = "0.124.2"
 thiserror = "2.0.17"
 inventory = "0.3"
 uuid = { version = "1.18.1", features = ["v4"] }
 tabulon_macros = { path = "tabulon_macros", version = "0.1.2" }
 log = "0.4.28"
+cranelift = { version = "0.125.3", features = [
+  "jit",
+  "module",
+  "native",
+] }
 
 [dev-dependencies]
 fasteval = "0.2.4"
 criterion = "0.7.0"
-rand = "0.8"
+rand = "0.9.2"
 foldhash = "0.2.0"
 shipyard = "0.9.3"
 

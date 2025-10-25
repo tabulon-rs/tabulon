@@ -1,11 +1,11 @@
 use crate::ast::Ast;
 use crate::error::JitError;
 use crate::rt_types::RegisteredFn;
-use cranelift::codegen::ir::instructions::BlockArg;
 use cranelift::codegen::ir::FuncRef;
+use cranelift::codegen::ir::instructions::BlockArg;
+use cranelift::jit::JITModule;
+use cranelift::module::{Linkage, Module};
 use cranelift::prelude::*;
-use cranelift_jit::JITModule;
-use cranelift_module::{Linkage, Module};
 use std::collections::HashMap;
 
 // Variable access abstraction used by codegen when emitting Var loads.
@@ -324,7 +324,8 @@ pub(crate) fn codegen_expr<'a>(
                 let next_cond_block = builder.create_block();
 
                 let vc = codegen_expr(
-                    module, registry, builder, var_index, var_vals, ctx_val, cond_ast, f64_ty, consts,
+                    module, registry, builder, var_index, var_vals, ctx_val, cond_ast, f64_ty,
+                    consts,
                 )?;
                 let one = consts.one(builder);
                 let cond = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, vc, one);
@@ -336,7 +337,8 @@ pub(crate) fn codegen_expr<'a>(
 
                 builder.switch_to_block(then_block);
                 let vt = codegen_expr(
-                    module, registry, builder, var_index, var_vals, ctx_val, then_ast, f64_ty, consts,
+                    module, registry, builder, var_index, var_vals, ctx_val, then_ast, f64_ty,
+                    consts,
                 )?;
                 builder.ins().jump(merge_block, &[BlockArg::Value(vt)]);
 
@@ -407,7 +409,6 @@ pub(crate) fn codegen_expr<'a>(
     }
 }
 
-
 /// Alternate codegen entry that supports resolver-based variable access.
 pub(crate) fn codegen_expr_with_access<'a>(
     module: &mut JITModule,
@@ -447,15 +448,15 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Neg(x) => {
             let v = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, x, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, x, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             Ok(builder.ins().fneg(v))
         }
         Ast::Not(x) => {
             let v = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, x, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, x, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let zero = consts.zero(builder);
             let is_zero = builder.ins().fcmp(FloatCC::Equal, v, zero);
@@ -464,56 +465,56 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Add(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             Ok(builder.ins().fadd(va, vb))
         }
         Ast::Sub(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             Ok(builder.ins().fsub(va, vb))
         }
         Ast::Mul(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             Ok(builder.ins().fmul(va, vb))
         }
         Ast::Div(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             Ok(builder.ins().fdiv(va, vb))
         }
         Ast::Pow(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let mut ext_sig = module.make_signature();
             let ptr_ty = module.target_config().pointer_type();
@@ -531,12 +532,12 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Eq(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let cmp = builder.ins().fcmp(FloatCC::Equal, va, vb);
             let one = consts.one(builder);
@@ -545,12 +546,12 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Ne(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let cmp = builder.ins().fcmp(FloatCC::NotEqual, va, vb);
             let one = consts.one(builder);
@@ -559,12 +560,12 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Lt(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let cmp = builder.ins().fcmp(FloatCC::LessThan, va, vb);
             let one = consts.one(builder);
@@ -573,12 +574,12 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Le(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let cmp = builder.ins().fcmp(FloatCC::LessThanOrEqual, va, vb);
             let one = consts.one(builder);
@@ -587,12 +588,12 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Gt(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let cmp = builder.ins().fcmp(FloatCC::GreaterThan, va, vb);
             let one = consts.one(builder);
@@ -601,12 +602,12 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Ge(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let cmp = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, va, vb);
             let one = consts.one(builder);
@@ -615,8 +616,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::And(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let zero = consts.zero(builder);
             let a_true = builder.ins().fcmp(FloatCC::NotEqual, va, zero);
@@ -663,8 +664,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
 
             builder.switch_to_block(rhs_block);
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, rhs_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, rhs_block,
             )?;
             let b_true = builder.ins().fcmp(FloatCC::NotEqual, vb, zero);
             let rhs_val = builder.ins().select(b_true, vb, zero);
@@ -685,8 +686,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
             let zero = consts.zero(builder);
 
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let is_a_true = builder.ins().fcmp(FloatCC::NotEqual, va, zero);
 
@@ -732,8 +733,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
 
             builder.switch_to_block(rhs_block);
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, rhs_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, rhs_block,
             )?;
             let is_b_true = builder.ins().fcmp(FloatCC::NotEqual, vb, zero);
             let b_result = builder.ins().select(is_b_true, vb, zero);
@@ -753,8 +754,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
 
             // Evaluate condition first in current block
             let vc = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, c, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, c, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let one = consts.one(builder);
             let cond = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, vc, one);
@@ -789,15 +790,15 @@ pub(crate) fn codegen_expr_with_access<'a>(
 
             builder.switch_to_block(then_block);
             let vt = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, t, f64_ty, consts, analysis,
-                blk_cache, then_block,
+                module, registry, builder, var_index, var_access, ctx_val, t, f64_ty, consts,
+                analysis, blk_cache, then_block,
             )?;
             builder.ins().jump(merge_block, &[BlockArg::Value(vt)]);
 
             builder.switch_to_block(else_block);
             let ve = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, e, f64_ty, consts, analysis,
-                blk_cache, else_block,
+                module, registry, builder, var_index, var_access, ctx_val, e, f64_ty, consts,
+                analysis, blk_cache, else_block,
             )?;
             builder.ins().jump(merge_block, &[BlockArg::Value(ve)]);
 
@@ -838,8 +839,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
 
                 // Evaluate condition in the current cond_block
                 let vc = codegen_expr_with_access(
-                    module, registry, builder, var_index, var_access, ctx_val, cond_ast, f64_ty, consts, analysis,
-                    blk_cache, cond_block,
+                    module, registry, builder, var_index, var_access, ctx_val, cond_ast, f64_ty,
+                    consts, analysis, blk_cache, cond_block,
                 )?;
                 let one = consts.one(builder);
                 let cond = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, vc, one);
@@ -853,13 +854,15 @@ pub(crate) fn codegen_expr_with_access<'a>(
                     blk_cache.insert(next_cond_block, parent);
                 }
 
-                builder.ins().brif(cond, then_block, &[], next_cond_block, &[]);
+                builder
+                    .ins()
+                    .brif(cond, then_block, &[], next_cond_block, &[]);
                 builder.seal_block(then_block);
 
                 builder.switch_to_block(then_block);
                 let vt = codegen_expr_with_access(
-                    module, registry, builder, var_index, var_access, ctx_val, then_ast, f64_ty, consts, analysis,
-                    blk_cache, then_block,
+                    module, registry, builder, var_index, var_access, ctx_val, then_ast, f64_ty,
+                    consts, analysis, blk_cache, then_block,
                 )?;
                 builder.ins().jump(merge_block, &[BlockArg::Value(vt)]);
 
@@ -875,8 +878,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
             // else branch (last arg)
             let else_ast = &args[n - 1];
             let v_else = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, else_ast, f64_ty, consts, analysis,
-                blk_cache, cond_block,
+                module, registry, builder, var_index, var_access, ctx_val, else_ast, f64_ty,
+                consts, analysis, blk_cache, cond_block,
             )?;
             builder.ins().jump(merge_block, &[BlockArg::Value(v_else)]);
 
@@ -886,23 +889,23 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
         Ast::Max(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             Ok(builder.ins().fmax(va, vb))
         }
         Ast::Min(a, b) => {
             let va = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             let vb = codegen_expr_with_access(
-                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts, analysis,
-                blk_cache, cur_block,
+                module, registry, builder, var_index, var_access, ctx_val, b, f64_ty, consts,
+                analysis, blk_cache, cur_block,
             )?;
             Ok(builder.ins().fmin(va, vb))
         }
@@ -930,8 +933,8 @@ pub(crate) fn codegen_expr_with_access<'a>(
             argv.push(ctx_val);
             for a in args {
                 let v = codegen_expr_with_access(
-                    module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts, analysis,
-                    blk_cache, cur_block,
+                    module, registry, builder, var_index, var_access, ctx_val, a, f64_ty, consts,
+                    analysis, blk_cache, cur_block,
                 )?;
                 argv.push(v);
             }
@@ -941,5 +944,3 @@ pub(crate) fn codegen_expr_with_access<'a>(
         }
     }
 }
-
-

@@ -1,15 +1,15 @@
 use crate::ast::Ast;
-use crate::codegen::{F64Consts, codegen_expr, codegen_expr_with_access, VarAccessIR};
+use crate::codegen::{F64Consts, VarAccessIR, codegen_expr, codegen_expr_with_access};
 use crate::error::JitError;
 use crate::parser::Parser;
 use crate::prepared::PreparedExpr;
 use crate::resolver::IdentityResolver;
 use crate::rt_types::{Fn0, Fn1, Fn2, Fn3, JitFn, JitFnRef, RegisteredFn};
 use cranelift::codegen::settings;
+use cranelift::jit::{JITBuilder, JITModule};
+use cranelift::module::{Linkage, Module};
+use cranelift::native;
 use cranelift::prelude::*;
-use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{Linkage, Module};
-use cranelift_native as native;
 use log::debug;
 use std::collections::HashMap;
 use std::sync::{
@@ -85,8 +85,6 @@ impl Tabula<()> {
         }
     }
 }
-
-
 
 fn ast_uses_ctx(ast: &Ast, funcs: &HashMap<(String, u8), RegisteredFn>) -> bool {
     use crate::ast::Ast::*;
@@ -171,7 +169,8 @@ impl<Ctx> Tabula<Ctx> {
                 arity: 0,
             });
         }
-        self.funcs.insert(key, RegisteredFn::Nullary { f, uses_ctx });
+        self.funcs
+            .insert(key, RegisteredFn::Nullary { f, uses_ctx });
         Ok(())
     }
     /// Registers a unary (1-argument) function with the engine.
@@ -240,7 +239,8 @@ impl<Ctx> Tabula<Ctx> {
                 arity: 3,
             });
         }
-        self.funcs.insert(key, RegisteredFn::Ternary { f, uses_ctx });
+        self.funcs
+            .insert(key, RegisteredFn::Ternary { f, uses_ctx });
         Ok(())
     }
 
@@ -267,28 +267,55 @@ impl<Ctx> Tabula<Ctx> {
             match F::ARITY {
                 0 => {
                     let f: Fn0 = std::mem::transmute::<*const u8, Fn0>(F::addr());
-                    self.funcs.insert(key, RegisteredFn::Nullary { f, uses_ctx: F::USES_CTX });
+                    self.funcs.insert(
+                        key,
+                        RegisteredFn::Nullary {
+                            f,
+                            uses_ctx: F::USES_CTX,
+                        },
+                    );
                 }
                 1 => {
                     let f: Fn1 = std::mem::transmute::<*const u8, Fn1>(F::addr());
-                    self.funcs.insert(key, RegisteredFn::Unary { f, uses_ctx: F::USES_CTX });
+                    self.funcs.insert(
+                        key,
+                        RegisteredFn::Unary {
+                            f,
+                            uses_ctx: F::USES_CTX,
+                        },
+                    );
                 }
                 2 => {
                     let f: Fn2 = std::mem::transmute::<*const u8, Fn2>(F::addr());
-                    self.funcs.insert(key, RegisteredFn::Binary { f, uses_ctx: F::USES_CTX });
+                    self.funcs.insert(
+                        key,
+                        RegisteredFn::Binary {
+                            f,
+                            uses_ctx: F::USES_CTX,
+                        },
+                    );
                 }
                 3 => {
                     let f: Fn3 = std::mem::transmute::<*const u8, Fn3>(F::addr());
-                    self.funcs.insert(key, RegisteredFn::Ternary { f, uses_ctx: F::USES_CTX });
+                    self.funcs.insert(
+                        key,
+                        RegisteredFn::Ternary {
+                            f,
+                            uses_ctx: F::USES_CTX,
+                        },
+                    );
                 }
                 n => {
-                    return Err(JitError::Internal(format!("unsupported arity {} for {}", n, F::NAME)));
+                    return Err(JitError::Internal(format!(
+                        "unsupported arity {} for {}",
+                        n,
+                        F::NAME
+                    )));
                 }
             }
         }
         Ok(())
     }
-
 
     fn ensure_module_and_register(&mut self) -> Result<(), JitError> {
         if self.module.is_none() {
@@ -304,7 +331,7 @@ impl<Ctx> Tabula<Ctx> {
                 .finish(settings::Flags::new(flag_builder))
                 .map_err(|e| JitError::Internal(e.to_string()))?;
 
-            let mut jb = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+            let mut jb = JITBuilder::with_isa(isa, cranelift::module::default_libcall_names());
             // Register built-in pow helper (ctx-ignoring trampoline)
             jb.symbol("tabulon_pow_f64_ctx", tabulon_pow_f64_ctx as *const u8);
             // Register user-provided variable getter (if any)
@@ -437,11 +464,10 @@ impl<Ctx> Tabula<Ctx> {
 
                     // If there are no short-circuiting or if-like constructs, take a fast path:
                     // preload all variables once via resolver and use the direct codegen.
-                    let no_sc_or_if =
-                        analysis_ref.and_carry.is_empty()
-                            && analysis_ref.or_carry.is_empty()
-                            && analysis_ref.if_carry.is_empty()
-                            && analysis_ref.ifs_cond_carry.is_empty();
+                    let no_sc_or_if = analysis_ref.and_carry.is_empty()
+                        && analysis_ref.or_carry.is_empty()
+                        && analysis_ref.if_carry.is_empty()
+                        && analysis_ref.ifs_cond_carry.is_empty();
 
                     if no_sc_or_if {
                         // Preload in SSA: call resolver once per variable index
@@ -501,15 +527,25 @@ impl<Ctx> Tabula<Ctx> {
         Ok(module.get_finalized_function(func_id))
     }
 
-
     /// Compiles a pre-parsed and prepared expression into an executable `CompiledExpr`.
     ///
     /// This path performs codegen only; it assumes the caller already parsed (and optionally
     /// optimized) the AST and collected the variable ordering/indexing into a PreparedExpr.
-    pub fn compile_prepared<K>(&mut self, prepared: &PreparedExpr<K>) -> Result<CompiledExpr<K, Ctx>, JitError>
-        where K: Clone,
+    pub fn compile_prepared<K>(
+        &mut self,
+        prepared: &PreparedExpr<K>,
+    ) -> Result<CompiledExpr<K, Ctx>, JitError>
+    where
+        K: Clone,
     {
-        let code = self.build_and_finalize_with(&prepared.var_index, &*prepared.ast, prepared.needs_bool_consts, prepared.ordered_vars.len(), VarAccessStrategy::DirectF64, prepared.analysis.as_ref())?;
+        let code = self.build_and_finalize_with(
+            &prepared.var_index,
+            &*prepared.ast,
+            prepared.needs_bool_consts,
+            prepared.ordered_vars.len(),
+            VarAccessStrategy::DirectF64,
+            prepared.analysis.as_ref(),
+        )?;
         let func_ptr: JitFn = unsafe { std::mem::transmute(code) };
         let gen_at = self.generation.load(Ordering::Relaxed);
         Ok(CompiledExpr::<K, Ctx> {
@@ -522,13 +558,24 @@ impl<Ctx> Tabula<Ctx> {
             _phantom_ctx: std::marker::PhantomData,
         })
     }
-    
+
     /// Compiles a pre-parsed and prepared expression into an executable `CompiledExprRef` that
     /// expects inputs as references or raw pointers.
-    pub fn compile_prepared_ref<K>(&mut self, prepared: &PreparedExpr<K>) -> Result<CompiledExprRef<K, Ctx>, JitError>
-        where K: Clone,
+    pub fn compile_prepared_ref<K>(
+        &mut self,
+        prepared: &PreparedExpr<K>,
+    ) -> Result<CompiledExprRef<K, Ctx>, JitError>
+    where
+        K: Clone,
     {
-        let code = self.build_and_finalize_with(&prepared.var_index, &*prepared.ast, prepared.needs_bool_consts, prepared.ordered_vars.len(), VarAccessStrategy::IndirectPtr, prepared.analysis.as_ref())?;
+        let code = self.build_and_finalize_with(
+            &prepared.var_index,
+            &*prepared.ast,
+            prepared.needs_bool_consts,
+            prepared.ordered_vars.len(),
+            VarAccessStrategy::IndirectPtr,
+            prepared.analysis.as_ref(),
+        )?;
         let func_ptr: JitFnRef = unsafe { std::mem::transmute(code) };
         let gen_at = self.generation.load(Ordering::Relaxed);
         Ok(CompiledExprRef::<K, Ctx> {
@@ -541,9 +588,13 @@ impl<Ctx> Tabula<Ctx> {
             _phantom_ctx: std::marker::PhantomData,
         })
     }
-    
+
     /// Like compile_prepared, but allows selecting how variables are accessed by the compiled code.
-    pub fn compile_prepared_with<K: Clone>(&mut self, prepared: &PreparedExpr<K>, strat: VarAccessStrategy) -> Result<CompiledExpr<K, Ctx>, JitError> {
+    pub fn compile_prepared_with<K: Clone>(
+        &mut self,
+        prepared: &PreparedExpr<K>,
+        strat: VarAccessStrategy,
+    ) -> Result<CompiledExpr<K, Ctx>, JitError> {
         let (code, is_resolver) = match strat {
             VarAccessStrategy::DirectF64 | VarAccessStrategy::IndirectPtr => (
                 self.build_and_finalize_with(
@@ -582,7 +633,11 @@ impl<Ctx> Tabula<Ctx> {
     }
 
     /// Like compile_prepared_ref, but allows selecting how variables are accessed by the compiled code.
-    pub fn compile_prepared_ref_with<K: Clone>(&mut self, prepared: &PreparedExpr<K>, strat: VarAccessStrategy) -> Result<CompiledExprRef<K, Ctx>, JitError> {
+    pub fn compile_prepared_ref_with<K: Clone>(
+        &mut self,
+        prepared: &PreparedExpr<K>,
+        strat: VarAccessStrategy,
+    ) -> Result<CompiledExprRef<K, Ctx>, JitError> {
         let code = self.build_and_finalize_with(
             &prepared.var_index,
             &prepared.ast,
@@ -603,7 +658,7 @@ impl<Ctx> Tabula<Ctx> {
             _phantom_ctx: std::marker::PhantomData,
         })
     }
-    
+
     /// Compiles an expression string into an executable `CompiledExpr`.
     ///
     /// This method parses, optimizes, and JIT-compiles the expression to native machine code.
@@ -748,7 +803,9 @@ impl<K, Ctx> CompiledExpr<K, Ctx> {
             return Err(JitError::Invalidated);
         }
         if !self.resolver_mode {
-            return Err(JitError::Internal("eval_resolver_ctx called on non-resolver compiled expr".into()));
+            return Err(JitError::Internal(
+                "eval_resolver_ctx called on non-resolver compiled expr".into(),
+            ));
         }
         let f = self.func_ptr;
         let ctx_ptr = (ctx as *mut Ctx) as crate::rt_types::CtxPtr;
@@ -772,7 +829,7 @@ impl<K, Ctx> GenToken for CompiledExpr<K, Ctx> {
 /// Created by [`Tabula::compile_ref`].
 /// This version is optimized for evaluation methods that use pointers (`eval` and `eval_ptrs`),
 /// which can be slightly more efficient if the underlying data is not contiguous.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct CompiledExprRef<K = String, Ctx = ()> {
     pub(crate) func_ptr: JitFnRef,
     pub(crate) ordered_vars: Vec<K>,
@@ -812,7 +869,9 @@ impl<K, Ctx> CompiledExprRef<K, Ctx> {
             return Err(JitError::Invalidated);
         }
         if !self.resolver_mode {
-            return Err(JitError::Internal("eval_resolver_ctx called on non-resolver compiled expr".into()));
+            return Err(JitError::Internal(
+                "eval_resolver_ctx called on non-resolver compiled expr".into(),
+            ));
         }
         let f = self.func_ptr;
         let ctx_ptr = (ctx as *mut Ctx) as crate::rt_types::CtxPtr;
@@ -910,8 +969,6 @@ where
 trait CheckGen {
     fn check_gen<T>(&self, arr: &[T], needed: usize) -> Result<(), JitError>;
 }
-
-
 
 impl<Ctx> Tabula<Ctx> {
     /// Creates a new `Tabula` engine with the default configuration for a specific context type.
