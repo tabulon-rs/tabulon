@@ -1,6 +1,6 @@
-use proc_macro::TokenStream;
+use proc_macro::{TokenStream, Span};
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, FnArg, ItemFn, Pat, PatType, Type, TypeReference};
+use syn::{parse_macro_input, FnArg, ItemFn, Pat, PatType, Type, TypeReference, GenericArgument, PathArguments};
 
 // #[function]
 // Supports numeric parameters (f64) and optionally a single context parameter
@@ -124,6 +124,29 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let ctx_param_ident = if has_ctx { format_ident!("ctx_ptr") } else { format_ident!("_ctx") };
 
+    // Helper: replace any lifetime parameters in a type path with 'static so that
+    // generated shims and type_name computations don't need to carry user lifetimes.
+    fn __tabulon_replace_lifetimes_in_type(ty: &mut Type) {
+        match ty {
+            Type::Path(tp) => {
+                for seg in tp.path.segments.iter_mut() {
+                    if let PathArguments::AngleBracketed(ab) = &mut seg.arguments {
+                        for arg in ab.args.iter_mut() {
+                            match arg {
+                                GenericArgument::Lifetime(lt) => {
+                                    *lt = syn::Lifetime::new("'static", Span::call_site().into());
+                                }
+                                GenericArgument::Type(inner) => __tabulon_replace_lifetimes_in_type(inner),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     for p in &ordered {
         match p {
             ParamKind::Num(pt) => {
@@ -135,10 +158,13 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
             ParamKind::Ctx { name, elem_ty, is_mut } => {
                 // Bind context pointer to &Ctx or &mut Ctx variable with the original name
+                // but with lifetimes erased to 'static so this shim does not depend on user lifetimes.
+                let mut __bind_ty: Type = *elem_ty.clone();
+                __tabulon_replace_lifetimes_in_type(&mut __bind_ty);
                 let binding = if *is_mut {
-                    quote! { let #name: &mut #elem_ty = unsafe { &mut *(#ctx_param_ident as *mut #elem_ty) }; }
+                    quote! { let #name: &mut #__bind_ty = unsafe { &mut *(#ctx_param_ident as *mut #__bind_ty) }; }
                 } else {
-                    quote! { let #name: &#elem_ty = unsafe { &*(#ctx_param_ident as *const #elem_ty) }; }
+                    quote! { let #name: &#__bind_ty = unsafe { &*(#ctx_param_ident as *const #__bind_ty) }; }
                 };
                 ctx_bind = Some(binding);
                 ctx_ty_tokens = Some(elem_ty.clone());
@@ -153,12 +179,13 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let uses_ctx_lit = if has_ctx { quote! { true } } else { quote! { false } };
 
-    // Compute ctx TypeId for runtime verification at registration time.
-    let ctx_type_id_expr = if has_ctx {
-        let ty = ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx");
-        quote! { ::core::any::TypeId::of::<#ty>() }
+    // Compute ctx type tokens for runtime verification via type_name at registration time.
+    let ctx_type_name_ty = if has_ctx {
+        let mut ty: Type = *ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx").clone();
+        __tabulon_replace_lifetimes_in_type(&mut ty);
+        ty
     } else {
-        quote! { ::core::any::TypeId::of::<()>() } // unused when uses_ctx=false
+        syn::parse_quote! { () }
     };
 
     let ctx_id_fn_ident = format_ident!("__tabulon_ctx_of_{}", ident);
@@ -167,8 +194,9 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Conditional where-clause for compile-time context matching: only constrain when ctx is used
     let marker_where_clause = if has_ctx {
-        let ty = ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx");
-        quote! { where EngineCtx: ::tabulon::SameAs<#ty> }
+        let mut ty_norm: Type = *ctx_ty_tokens.as_ref().expect("ctx type tokens must exist when has_ctx").clone();
+        __tabulon_replace_lifetimes_in_type(&mut ty_norm);
+        quote! { where EngineCtx: ::tabulon::SameAs<#ty_norm> }
     } else {
         quote! {}
     };
@@ -183,7 +211,7 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         #[allow(non_snake_case)]
-        fn #ctx_id_fn_ident() -> ::core::any::TypeId { #ctx_type_id_expr }
+        fn #ctx_id_fn_ident() -> &'static str { ::core::any::type_name::<#ctx_type_name_ty>() }
 
         // Public marker type for optional compile-time context matching
         #[allow(non_camel_case_types)]
@@ -197,7 +225,7 @@ pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         ::tabulon::inventory::submit! {
-            ::tabulon::FnMeta { name: #name_str, arity: #arity_lit, addr: #shim_ident as *const u8, mod_path: module_path!(), uses_ctx: #uses_ctx_lit, ctx_type_id_fn: if #uses_ctx_lit { Some(#ctx_id_fn_ident as fn() -> ::core::any::TypeId) } else { None } }
+            ::tabulon::FnMeta { name: #name_str, arity: #arity_lit, addr: #shim_ident as *const u8, mod_path: module_path!(), uses_ctx: #uses_ctx_lit, ctx_type_name_fn: if #uses_ctx_lit { Some(#ctx_id_fn_ident as fn() -> &'static str) } else { None } }
         }
     };
 

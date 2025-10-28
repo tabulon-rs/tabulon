@@ -40,3 +40,12 @@ fn invalidated_after_free_memory() {
         other => panic!("expected Invalidated, got {:?}", other),
     }
 }
+
+#[test]
+fn divide_by_zero() {
+    let mut eng = Tabula::new();
+    let expr = eng.compile_ref("1 / 0").unwrap();
+    let result = expr.eval(&[]);
+
+    println!("err: {result:?}");
+}

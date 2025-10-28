@@ -18,10 +18,10 @@ name = "eval-bench"
 harness = false
 
 [dependencies]
-cranelift = "0.124.2"
-cranelift-jit = "0.124.2"
-cranelift-module = "0.124.2"
-cranelift-native = "0.124.2"
+cranelift = "0.125.2"
+cranelift-jit = "0.125.2"
+cranelift-module = "0.125.2"
+cranelift-native = "0.125.2"
 thiserror = "2.0.17"
 inventory = "0.3"
 uuid = { version = "1.18.1", features = ["v4"] }

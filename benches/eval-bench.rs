@@ -1,10 +1,10 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use fasteval::{Compiler, Evaler, Parser, Slab, eval_compiled_ref};
+use fasteval::{Compiler, Evaler, Parser as FeParser, Slab, eval_compiled_ref};
 use foldhash::{HashMap, HashMapExt};
 use rand::Rng;
 use std::hint::black_box;
 use tabulon::function;
-use tabulon::{Tabula, VarResolveError, VarResolver, register_functions};
+use tabulon::{Tabula, VarAccessStrategy, VarResolveError, VarResolver, Resolver, RESOLVER_TRAMPOLINE_SYMBOL, Parser as TbParser, IdentityResolver};
 
 const DEFAULT_F64: f64 = 0.0f64;
 
@@ -82,18 +82,10 @@ fn create_u64_map() -> HashMap<u64, f64> {
     vars
 }
 
-fn create_u64_box_map() -> HashMap<u64, Box<f64>> {
-    let mut vars: HashMap<u64, Box<f64>> = HashMap::new();
-    let map = create_u64_map();
-    map.iter().for_each(|(k, v)| {
-        vars.insert(*k, Box::new(*v));
-    });
-    vars
-}
 
 fn benchmark_eval(c: &mut Criterion) {
     let mut slab = Slab::new();
-    let parser = Parser::new();
+    let parser = FeParser::new();
 
     let expressions = vec![
         // Basic & Simple
@@ -109,9 +101,9 @@ fn benchmark_eval(c: &mut Criterion) {
         ("simple_and", "1.0 && 1.0"),
         ("simple_or", "0.0 || 1.0"),
         // Intermediate
-        ("complex_arithmetic", "(a * a + b * b) / 2.0"),
+        ("complex_arithmetic", "(a * 10 + b * 20) / 2.0"),
         ("builtin_func_max", "max(a, b)"),
-        ("custom_func_if", "if(a > b, a, b)"),
+        ("custom_func_if", "if(a > b, 1, 2)"),
         ("simple_dice", "dice(1, 6)"),
         ("dice_with_op", "dice(1, 20) + defense"),
         // Complex & Game-Oriented
@@ -142,112 +134,73 @@ fn benchmark_eval(c: &mut Criterion) {
     ];
 
     for (name, expr_str) in expressions.clone() {
+        let compiled = parser
+            .parse(expr_str, &mut slab.ps)
+            .unwrap()
+            .from(&slab.ps)
+            .compile(&slab.ps, &mut slab.cs);
+
+        let vars = create_string_map();
+
+        // The namespace `ns` is a closure that implements `fasteval::EvalNamespace`.
+        // It returns `Option<f64>`. Errors are signaled by returning `Some(f64::NAN)`.
+        let mut ns = move |name: &str, args: Vec<f64>| -> Option<f64> {
+            match name {
+                "dice" => {
+                    if args.len() != 2 {
+                        return Some(f64::NAN); // Signal error
+                    }
+                    let min = args[0];
+                    let max = args[1];
+                    if min > max {
+                        return Some(f64::NAN); // Signal error
+                    }
+                    let mut rng = rand::thread_rng();
+                    Some(rng.gen_range(min..=max))
+                }
+                "if" => {
+                    if args.len() != 3 {
+                        return Some(f64::NAN);
+                    }
+                    if args[0] > 0.0 {
+                        Some(args[1])
+                    } else {
+                        Some(args[2])
+                    }
+                }
+                _ => vars.get(name).map(|v| *v)
+            }
+        };
+
+        let mut eval = || -> Result<f64, fasteval::Error> {
+            Ok(eval_compiled_ref!(&compiled, &slab, &mut ns))
+        };
+
+        println!("fasteval result: {}", eval().unwrap_or_else(|e| panic!("Error evaluating expression: {}", e)));
         c.bench_function(&format!("eval_{}", name), |b| {
-            let compiled = parser
-                .parse(expr_str, &mut slab.ps)
-                .unwrap()
-                .from(&slab.ps)
-                .compile(&slab.ps, &mut slab.cs);
-
-            // Setup: Create the variables map and the namespace closure for each batch.
-            b.iter_batched(
-                || {
-                    let vars = create_string_map();
-
-                    // The namespace `ns` is a closure that implements `fasteval::EvalNamespace`.
-                    // It returns `Option<f64>`. Errors are signaled by returning `Some(f64::NAN)`.
-                    let ns = move |name: &str, args: Vec<f64>| -> Option<f64> {
-                        match name {
-                            "dice" => {
-                                if args.len() != 2 {
-                                    return Some(f64::NAN); // Signal error
-                                }
-                                let min = args[0];
-                                let max = args[1];
-                                if min > max {
-                                    return Some(f64::NAN); // Signal error
-                                }
-                                let mut rng = rand::thread_rng();
-                                Some(rng.gen_range(min..=max))
-                            }
-                            "if" => {
-                                if args.len() != 3 {
-                                    return Some(f64::NAN);
-                                }
-                                if args[0] > 0.0 {
-                                    Some(args[1])
-                                } else {
-                                    Some(args[2])
-                                }
-                            }
-                            "a" => Some(2.0),
-                            "b" => Some(3.0),
-                            "power" => Some(100.0),
-                            "defense" => Some(50.0),
-                            "critical_bonus" => Some(0.5),
-                            "skill_modifier" => Some(1.2),
-                            "threat" => Some(1000.0),
-                            "distance" => Some(20.0),
-                            "is_taunted" => Some(1.0),
-                            "crit_chance" => Some(20.0),
-                            "agility" => Some(15.0),
-                            "intelligence" => Some(25.0),
-                            "mana_pool" => Some(500.0),
-                            "rage_level" => Some(75.0),
-                            "haste_rating" => Some(1.1),
-                            _ => None
-                        }
-                    };
-                    ns
-                },
-                |mut eval_ns| {
-                    let mut eval = || -> Result<f64, fasteval::Error> {
-                        Ok(eval_compiled_ref!(&compiled, &slab, &mut eval_ns))
-                    };
-                    let _ = black_box(
-                        eval().unwrap_or_else(|e| panic!("Error evaluating expression: {}", e)),
-                    );
-                },
-                BatchSize::SmallInput,
-            )
-        });
-
-
-        c.bench_function(&format!("tabulon_eval_{}", name), |b| {
-            // Use u64-keyed resolver and map for tabulon
-            let mut eng: Tabula<u64, _> = Tabula::with_resolver(U64Resolver);
-            register_functions!(eng, dice).unwrap();
-            let compiled = eng.compile(expr_str).unwrap();
-            let vars = create_u64_map();
-
-            // The values must be supplied in the order that the compiler determined.
-            // We create a Vec of references here to match the `eval` signature.
-            let ordered_values: Vec<f64> = compiled
-                .vars()
-                .iter()
-                .map(|key| *vars.get(key).unwrap_or(&DEFAULT_F64))
-                .collect();
 
             b.iter(|| {
-                let _ = black_box(compiled.eval(&ordered_values));
+                let _ = black_box(eval().unwrap_or_else(|e| panic!("Error evaluating expression: {}", e)));
             });
         });
 
-        c.bench_function(&format!("tabulon_eval_ref_{}", name), |b| {
-            // Use u64-keyed resolver and map for tabulon
-            let mut eng: Tabula<u64, _> = Tabula::with_resolver(U64Resolver);
-            register_functions!(eng, dice).unwrap();
-            let compiled = eng.compile_ref(expr_str).unwrap();
-            let vars = create_u64_box_map();
-            let box_default = Box::new(DEFAULT_F64);
-            let ordered_ptrs = compiled
-                .vars()
-                .iter()
-                .map(|key| vars.get(key).unwrap_or(&box_default).as_ref() as *const f64)
-                .collect::<Vec<*const f64>>();
+
+        let mut eng: Tabula<()> = Tabula::new_ctx();
+        eng.enable_trait_resolver().unwrap();
+        eng.register_typed::<__tabulon_marker_dice>().unwrap();
+        let tparser = TbParser::new(expr_str).unwrap();
+        let prepared = tparser.parse_with_var_resolver(&IdentityResolver).unwrap();
+        let compiled = eng
+            .compile_prepared_with(&prepared, VarAccessStrategy::ResolverCall { symbol: RESOLVER_TRAMPOLINE_SYMBOL })
+            .unwrap();
+        let vars = create_string_map();
+        let mut resolver = HashmapResolver { vars: &compiled.vars(), vals: &vars };
+
+        println!("tabulon result: {}", compiled.eval_with_resolver(&mut resolver).unwrap());
+        c.bench_function(&format!("tabulon_cb_eval_{}", name), |b| {
 
             b.iter(|| {
-                let _ = black_box(compiled.eval_ptrs(&ordered_ptrs));
+                let _ = black_box(compiled.eval_with_resolver(&mut resolver).unwrap());
             });
         });
     }
@@ -255,3 +208,17 @@ fn benchmark_eval(c: &mut Criterion) {
 
 criterion_group!(benches, benchmark_eval);
 criterion_main!(benches);
+
+
+// Simple trait-based resolver that reads by index from an ordered slice built per expression
+struct HashmapResolver<'a> {
+    vars: &'a [String],
+    vals: &'a HashMap<String, f64>,
+}
+
+impl<'a> Resolver for HashmapResolver<'a> {
+    fn resolve(&mut self, index: u32) -> f64 {
+        let var = &self.vars[index as usize];
+        *self.vals.get(var).unwrap_or(&DEFAULT_F64)
+    }
+}

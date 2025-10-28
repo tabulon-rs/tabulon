@@ -11,10 +11,12 @@ mod parser;
 mod prepared;
 mod registry;
 mod resolver;
-mod rt_types;
+pub mod rt_types;
 mod analysis;
+pub mod trait_resolver;
 
 pub use engine::{CompiledExpr, CompiledExprRef, Tabula, VarAccessStrategy, GetVarFn};
+pub use trait_resolver::{Resolver, ResolverCtx, resolve_var_tramp, RESOLVER_TRAMPOLINE_SYMBOL};
 pub use parser::Parser;
 pub use prepared::PreparedExpr;
 
